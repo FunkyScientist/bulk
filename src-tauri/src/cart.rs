@@ -199,8 +199,8 @@ fn delete_items(app: &AppHandle, items: Vec<CartItem>, permanent: bool) -> Delet
     res
 }
 
-/// Drop a deleted item from the in-memory tree right away, so the UI updates even
-/// on drives that aren't kept live.
+/// Mark a deleted item gone in the in-memory tree right away (greyed out until the
+/// next scan), so the UI updates even on drives that aren't kept live.
 fn remove_from_tree(app: &AppHandle, it: &CartItem) {
     let state = app.state::<AppState>();
     let mut drives = state.drives.lock().unwrap();
@@ -209,7 +209,7 @@ fn remove_from_tree(app: &AppHandle, it: &CartItem) {
     };
     let Some(tree) = d.tree.as_mut() else { return };
     if (it.id as usize) < tree.len() && tree.path(it.id).eq_ignore_ascii_case(&it.path) {
-        tree.remove(it.id);
+        tree.mark_gone(it.id);
         d.view.rebuild(tree);
         d.dirty = true;
     }

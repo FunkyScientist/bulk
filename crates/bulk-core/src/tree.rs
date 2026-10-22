@@ -22,6 +22,9 @@ pub mod flags {
     pub const OFFLINE: u16 = 1 << 8;
     /// NTFS metadata file such as `$MFT`.
     pub const META: u16 = 1 << 9;
+    /// Deleted while the app watched. Kept in place (greyed out in the UI) until the
+    /// next scan, but no longer counted in any totals and skipped by `children`.
+    pub const GONE: u16 = 1 << 10;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -243,10 +246,21 @@ impl Tree {
         c.next_sibling = NONE;
     }
 
+    /// Live children of `id` (skips items that are `GONE`).
     pub fn children(&self, id: NodeId) -> Children<'_> {
         Children {
             tree: self,
             cur: self.nodes[id as usize].first_child,
+            all: false,
+        }
+    }
+
+    /// Children of `id` including deleted ones still shown greyed out.
+    pub fn children_all(&self, id: NodeId) -> Children<'_> {
+        Children {
+            tree: self,
+            cur: self.nodes[id as usize].first_child,
+            all: true,
         }
     }
 
@@ -261,6 +275,13 @@ impl Tree {
     /// Children of `id` ordered by `key` (sizes descending, names ascending).
     pub fn sorted_children(&self, id: NodeId, key: SortKey) -> Vec<NodeId> {
         let mut v: Vec<NodeId> = self.children(id).collect();
+        self.sort_ids(&mut v, key);
+        v
+    }
+
+    /// Like `sorted_children`, but including deleted items still shown.
+    pub fn sorted_children_all(&self, id: NodeId, key: SortKey) -> Vec<NodeId> {
+        let mut v: Vec<NodeId> = self.children_all(id).collect();
         self.sort_ids(&mut v, key);
         v
     }
@@ -364,11 +385,7 @@ impl Tree {
         let mut stack = vec![top];
         while let Some(id) = stack.pop() {
             order.push(id);
-            let mut c = self.nodes[id as usize].first_child;
-            while c != NONE {
-                stack.push(c);
-                c = self.nodes[c as usize].next_sibling;
-            }
+            stack.extend(self.children(id));
         }
         for &id in &order {
             let n = &mut self.nodes[id as usize];
@@ -415,6 +432,14 @@ impl Tree {
     }
 
     fn merge_children(&mut self, target: NodeId, sub: &Tree, from: NodeId) {
+        // A fresh scan settles what's really there; deleted leftovers go.
+        let ghosts: Vec<NodeId> = self
+            .children_all(target)
+            .filter(|&c| self.nodes[c as usize].has(flags::GONE))
+            .collect();
+        for g in ghosts {
+            self.drop_subtree(g);
+        }
         let mut old: HashMap<Vec<u8>, NodeId> = self
             .children(target)
             .map(|c| (self.name_lower(c).to_vec(), c))
@@ -465,8 +490,60 @@ impl Tree {
         self.unlink(id);
         let mut stack = vec![id];
         while let Some(x) = stack.pop() {
-            stack.extend(self.children(x));
+            stack.extend(self.children_all(x));
             self.nodes[x as usize].flags |= flags::DELETED;
+        }
+    }
+
+    /// Mark `id` (and everything below it) deleted but keep it in place so the UI
+    /// can show it greyed out. Ancestors' totals drop right away.
+    pub fn mark_gone(&mut self, id: NodeId) {
+        let n = self.nodes[id as usize];
+        if id == self.root || n.has(flags::DELETED) || n.has(flags::GONE) {
+            return;
+        }
+        if !n.has(flags::EXTRA_LINK) {
+            self.propagate(
+                id,
+                -(n.size as i64),
+                -(n.alloc as i64),
+                -(n.files as i64),
+                0,
+            );
+        }
+        let mut stack = vec![id];
+        while let Some(x) = stack.pop() {
+            stack.extend(self.children_all(x));
+            self.nodes[x as usize].flags |= flags::GONE;
+        }
+    }
+
+    /// Leave a greyed-out copy of `id` where it is now, for an item that's about to
+    /// move somewhere it no longer belongs to this folder (e.g. the Recycle Bin).
+    /// The copy doesn't count toward any totals.
+    pub fn leave_ghost(&mut self, id: NodeId) {
+        let n = self.nodes[id as usize];
+        if id == self.root || n.parent == NONE {
+            return;
+        }
+        let name = self.name(id).to_string();
+        let g = self.push_node(&name, n.flags | flags::GONE, n.size, n.alloc, n.mtime, 0);
+        self.nodes[g as usize].files = n.files;
+        self.link(g, n.parent);
+    }
+
+    /// Forget greyed-out leftovers called `name` under `parent`, e.g. when a
+    /// recycled file is restored to where it was.
+    pub fn drop_ghosts_named(&mut self, parent: NodeId, name: &str) {
+        let lower = name.to_ascii_lowercase();
+        let ghosts: Vec<NodeId> = self
+            .children_all(parent)
+            .filter(|&c| {
+                self.nodes[c as usize].has(flags::GONE) && self.name_lower(c) == lower.as_bytes()
+            })
+            .collect();
+        for g in ghosts {
+            self.drop_subtree(g);
         }
     }
 
@@ -524,7 +601,7 @@ impl Tree {
         if n.has(flags::DELETED) {
             return;
         }
-        if !n.has(flags::EXTRA_LINK) {
+        if !n.has(flags::EXTRA_LINK) && !n.has(flags::GONE) {
             self.propagate(
                 id,
                 -(n.size as i64),
@@ -578,14 +655,18 @@ impl Tree {
         self.nodes
             .iter()
             .skip(1)
-            .filter(|n| n.is_dir() && !n.has(flags::DELETED))
+            .filter(|n| n.is_dir() && !n.has(flags::DELETED) && !n.has(flags::GONE))
             .count()
     }
 
     /// Copy only the live nodes into a fresh tree with compact ids. Children keep
     /// their order. Useful before saving a snapshot after many live updates.
     pub fn compact(&self) -> Tree {
-        let live = self.nodes.iter().filter(|n| !n.has(flags::DELETED)).count();
+        let live = self
+            .nodes
+            .iter()
+            .filter(|n| !n.has(flags::DELETED) && !n.has(flags::GONE))
+            .count();
         let mut out = Tree::with_capacity(self.name(self.root), live, self.names.len());
         let r = self.nodes[self.root as usize];
         {
@@ -610,18 +691,22 @@ impl Tree {
 pub struct Children<'a> {
     tree: &'a Tree,
     cur: NodeId,
+    all: bool,
 }
 
 impl Iterator for Children<'_> {
     type Item = NodeId;
     #[inline]
     fn next(&mut self) -> Option<NodeId> {
-        if self.cur == NONE {
-            return None;
+        while self.cur != NONE {
+            let id = self.cur;
+            let n = &self.tree.nodes[id as usize];
+            self.cur = n.next_sibling;
+            if self.all || n.flags & flags::GONE == 0 {
+                return Some(id);
+            }
         }
-        let id = self.cur;
-        self.cur = self.tree.nodes[id as usize].next_sibling;
-        Some(id)
+        None
     }
 }
 

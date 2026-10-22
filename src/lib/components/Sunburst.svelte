@@ -193,7 +193,10 @@
       if (e <= s) continue;
 
       const f = t.flags[i];
-      if (f & TileFlags.DIR) {
+      if (f & TileFlags.GONE) {
+        ctx.fillStyle = css('--fg-subtle');
+        ctx.globalAlpha = alpha * 0.18;
+      } else if (f & TileFlags.DIR) {
         ctx.fillStyle = branchHues[branch[i] % branchHues.length] ?? accent;
         ctx.globalAlpha =
           alpha * (f & TileFlags.COLLAPSED ? 0.3 : Math.max(0.35, 0.9 - (t.depth[i] - 1) * 0.11));
@@ -352,6 +355,7 @@
       name: arcs.labels.get(id),
       value: arcs.value[hover],
       cart: !!(arcs.flags[hover] & TileFlags.IN_CART),
+      gone: !!(arcs.flags[hover] & TileFlags.GONE),
     };
   });
   // Path relative to the folder the chart shows, e.g. `SubFolder\Item.ext`.
@@ -411,6 +415,7 @@
       e.preventDefault();
       onMove(e);
       if (hover < 0 || !arcs) return zoomOut();
+      if (arcs.flags[hover] & TileFlags.GONE) return;
       const id = arcs.id[hover];
       app.selectNode(id, true);
       nodeMenu(
@@ -468,7 +473,9 @@
         {bytes(tip.value)}
         {#if total > 0}<span class="text-fg-subtle"> · {percent(tip.value / total)}</span>{/if}
       </div>
-      {#if tip.cart}
+      {#if tip.gone}
+        <div class="mt-0.5 text-[11.5px] text-danger">Deleted</div>
+      {:else if tip.cart}
         <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-danger">
           <Trash2 class="size-3" /> In cleanup cart
         </div>

@@ -279,6 +279,7 @@
         <div
           class="row absolute inset-x-0 flex items-center pr-3"
           class:selected={row && app.selected === row.id}
+          class:gone={row && row.flags & Flags.GONE}
           class:enter={delay !== null}
           style="transform: translateY({i * ROW}px); height: {ROW}px; {delay !== null
             ? `animation-delay: ${delay}ms`
@@ -289,7 +290,7 @@
           tabindex="-1"
           onclick={() => row && select(row)}
           oncontextmenu={(e) => {
-            if (!row) return;
+            if (!row || row.flags & Flags.GONE) return e.preventDefault();
             select(row);
             nodeMenu(e, letter, row.id);
           }}
@@ -322,9 +323,19 @@
                       class="size-3.5"
                     />{/if}{:else}<File class="size-3.5" />{/if}
               </span>
-              <span class="truncate" class:text-fg-muted={row.flags & (Flags.HIDDEN | Flags.META)}>
+              <span
+                class="name truncate"
+                class:text-fg-muted={row.flags & (Flags.HIDDEN | Flags.META)}
+              >
                 {row.depth === 0 ? `${row.name}\\` : row.name}
               </span>
+              {#if row.flags & Flags.GONE}
+                <span
+                  class="shrink-0 rounded px-1 text-[10.5px] font-medium text-danger"
+                  style="background: color-mix(in oklab, var(--danger) 12%, transparent)"
+                  >Deleted</span
+                >
+              {/if}
             </div>
             {#if showShare}
               <div class="flex w-[96px] shrink-0 items-center gap-2 pl-2">
@@ -332,7 +343,7 @@
                   <div class="bar h-full rounded-full" style="width: {row.share * 100}%"></div>
                 </div>
                 <span class="tabular w-9 text-right text-[11px] text-fg-subtle"
-                  >{percent(row.share)}</span
+                  >{row.flags & Flags.GONE ? '' : percent(row.share)}</span
                 >
               </div>
             {/if}
@@ -419,5 +430,15 @@
     to {
       background-position: -200% 0;
     }
+  }
+  .row.gone {
+    opacity: 0.5;
+  }
+  .row.gone .name {
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in oklab, var(--fg) 45%, transparent);
+  }
+  .row.gone .bar {
+    visibility: hidden;
   }
 </style>

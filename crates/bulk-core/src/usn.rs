@@ -161,7 +161,7 @@ impl FrnIndex {
     pub fn build(tree: &Tree) -> FrnIndex {
         let mut m = HashMap::with_capacity(tree.len());
         for (i, n) in tree.nodes.iter().enumerate() {
-            if n.frn != 0 && !n.has(flags::EXTRA_LINK) && !n.has(flags::DELETED) {
+            if n.frn != 0 && !n.has(flags::EXTRA_LINK) && !n.has(flags::DELETED | flags::GONE) {
                 m.insert(n.frn & RECORD_MASK, i as NodeId);
             }
         }
@@ -171,7 +171,7 @@ impl FrnIndex {
     fn live(&self, tree: &Tree, frn: u64) -> Option<NodeId> {
         let id = *self.0.get(&(frn & RECORD_MASK))?;
         let n = tree.get(id);
-        (!n.has(flags::DELETED)).then_some(id)
+        (!n.has(flags::DELETED | flags::GONE)).then_some(id)
     }
 }
 
@@ -187,7 +187,8 @@ pub fn apply(tree: &mut Tree, index: &mut FrnIndex, changes: &[Change]) -> usize
                     && tree.get(id).frn == *frn
                     && id != tree.root
                 {
-                    tree.remove(id);
+                    // Keep it on screen, greyed out, until the next scan.
+                    tree.mark_gone(id);
                     index.0.remove(&(frn & RECORD_MASK));
                     touched += 1;
                 }
@@ -241,7 +242,13 @@ fn apply_one(
         Some(id) => {
             let n = *tree.get(id);
             if n.parent != parent && !tree.is_ancestor(id, parent) {
+                // Deleting in Explorer is a move into the Recycle Bin; show it as
+                // deleted where it was.
+                if in_recycle_bin(tree, parent) && !in_recycle_bin(tree, id) {
+                    tree.leave_ghost(id);
+                }
                 tree.move_to(id, parent);
+                tree.drop_ghosts_named(parent, name);
             }
             if tree.name(id) != name {
                 tree.rename(id, name);
@@ -256,12 +263,22 @@ fn apply_one(
             }
         }
         None => {
+            tree.drop_ghosts_named(parent, name);
             let id = tree.add_live(parent, name, s.flags, s.size, s.alloc, s.mtime, s.frn);
             index.0.insert(rec, id);
         }
     }
     *touched += 1;
     true
+}
+
+/// Whether `id` is inside the drive's `$Recycle.Bin`.
+fn in_recycle_bin(tree: &Tree, id: NodeId) -> bool {
+    let top = std::iter::once(id)
+        .chain(tree.ancestors(id))
+        .take_while(|&a| a != tree.root)
+        .last();
+    top.is_some_and(|t| tree.name_lower(t) == b"$recycle.bin")
 }
 
 #[cfg(test)]
@@ -306,5 +323,36 @@ mod tests {
         assert_eq!(t.get(t.root).size, 57);
         assert!(t.find_path("C:\\Docs\\New\\new.bin").is_some());
         assert!(t.find_path("C:\\b.txt").is_none());
+    }
+
+    #[test]
+    fn deleted_items_stay_greyed_out_until_restored() {
+        let mut t = Tree::new("C:");
+        t.get_mut(t.root).frn = 5;
+        let bin = t.add(t.root, "$Recycle.Bin", flags::DIR, 0, 0, 0, 300);
+        let docs = t.add(t.root, "Docs", flags::DIR, 0, 0, 0, 100);
+        let a = t.add(docs, "a.txt", 0, 10, 10, 0, 101);
+        t.add(docs, "b.txt", 0, 20, 20, 0, 102);
+        t.aggregate();
+        let mut idx = FrnIndex::build(&t);
+
+        // a.txt goes to the Recycle Bin, b.txt is deleted outright.
+        apply(
+            &mut t,
+            &mut idx,
+            &[st(101, 300, "$R1.txt", 10, false), Change::Removed(102)],
+        );
+        assert_eq!(t.get(docs).size, 0);
+        assert_eq!(t.children(docs).count(), 0);
+        let ghosts: Vec<_> = t.children_all(docs).map(|g| t.name(g).to_string()).collect();
+        assert_eq!(ghosts.len(), 2);
+        assert!(ghosts.iter().all(|n| n == "a.txt" || n == "b.txt"));
+        assert_eq!(t.get(a).parent, bin);
+
+        // Restoring a.txt puts it back and clears its ghost.
+        apply(&mut t, &mut idx, &[st(101, 100, "a.txt", 10, false)]);
+        assert_eq!(t.get(docs).size, 10);
+        assert_eq!(t.children_all(docs).count(), 2);
+        assert!(t.compact().find_path("C:\\Docs\\b.txt").is_none());
     }
 }

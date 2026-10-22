@@ -108,7 +108,7 @@ impl View {
         while let Some((id, depth)) = stack.pop() {
             self.rows.push((id, depth));
             if self.expanded.contains(&id) {
-                let kids = tree.sorted_children(id, self.sort);
+                let kids = tree.sorted_children_all(id, self.sort);
                 for &k in kids.iter().rev() {
                     stack.push((k, depth + 1));
                 }

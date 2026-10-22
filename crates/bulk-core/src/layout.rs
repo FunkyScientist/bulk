@@ -32,6 +32,8 @@ pub mod tile_flags {
     pub const IN_CART: u8 = 16;
     /// The item that was added to the cart itself, as opposed to something inside it.
     pub const CART_ROOT: u8 = 32;
+    /// Deleted while the app watched; drawn greyed out. Set by the app.
+    pub const GONE: u8 = 64;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -144,7 +146,7 @@ pub fn treemap(tree: &Tree, root: NodeId, o: &TreemapOptions) -> Vec<Tile> {
 
         kids.clear();
         kids.extend(
-            tree.children(p.id)
+            tree.children_all(p.id)
                 .filter(|&c| !tree.get(c).has(flags::EXTRA_LINK))
                 .map(|c| (c, value(c) as f64))
                 .filter(|&(_, v)| v > 0.0),
@@ -245,17 +247,18 @@ pub fn sunburst(
         if depth >= max_depth || out.len() >= max_arcs {
             continue;
         }
-        let total = value(id) as f64;
-        if total <= 0.0 {
-            continue;
-        }
         kids.clear();
         kids.extend(
-            tree.children(id)
+            tree.children_all(id)
                 .filter(|&c| !tree.get(c).has(flags::EXTRA_LINK))
                 .map(|c| (c, value(c)))
                 .filter(|&(_, v)| v > 0),
         );
+        // Deleted items still on screen aren't in the folder's total; make room.
+        let total = (value(id) as f64).max(kids.iter().map(|k| k.1 as f64).sum());
+        if total <= 0.0 {
+            continue;
+        }
         kids.sort_unstable_by(|a, b| b.1.cmp(&a.1));
         let span = a1 - a0;
         let mut a = a0;

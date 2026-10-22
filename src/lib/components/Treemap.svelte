@@ -136,7 +136,11 @@
       const rh = h - inset * 2;
       const r = Math.min(4, rw / 4, rh / 4);
 
-      if (f & TileFlags.DIR && !(f & TileFlags.COLLAPSED)) {
+      if (f & TileFlags.GONE) {
+        // Deleted while watched: a faint placeholder until the next scan.
+        ctx.fillStyle = muted;
+        ctx.globalAlpha = dark ? 0.1 : 0.12;
+      } else if (f & TileFlags.DIR && !(f & TileFlags.COLLAPSED)) {
         // Nested folders stack, so keep each layer faint.
         ctx.fillStyle = dark ? 'rgba(255,255,255,0.028)' : 'rgba(20,20,60,0.03)';
       } else if (f & TileFlags.DIR) {
@@ -170,6 +174,15 @@
         ctx.globalAlpha = 1;
       }
       if (f & TileFlags.CART_ROOT) cartRoots.push(i);
+      if (f & TileFlags.GONE && rw > 3 && rh > 3) {
+        ctx.strokeStyle = muted;
+        ctx.globalAlpha = 0.5;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      }
 
       const label = t.labels.get(t.id[i]);
       if (!label) continue;
@@ -192,6 +205,7 @@
         ctx.font = '500 11px "Geist Variable", sans-serif';
         ctx.fillStyle = dark ? 'rgba(10,10,16,0.82)' : inkOn(categoryColor(t.cat[i], theme));
         if (f & TileFlags.DIR || f & TileFlags.IN_CART) ctx.fillStyle = fg;
+        if (f & TileFlags.GONE) ctx.fillStyle = muted;
         const cy = h >= 32 ? y + h / 2 - 6 : y + h / 2;
         ctx.fillText(ellipsize(label, w - 10, 6.1), x + 5, cy);
         if (h >= 32) {
@@ -420,6 +434,7 @@
       value: tiles.value[hover],
       dir: !!(tiles.flags[hover] & TileFlags.DIR),
       cart: !!(tiles.flags[hover] & TileFlags.IN_CART),
+      gone: !!(tiles.flags[hover] & TileFlags.GONE),
     };
   });
 
@@ -484,6 +499,7 @@
       e.preventDefault();
       onMove(e);
       if (hover < 0 || !tiles) return zoomOut();
+      if (tiles.flags[hover] & TileFlags.GONE) return;
       const id = tiles.id[hover];
       app.selectNode(id, true);
       nodeMenu(
@@ -515,7 +531,9 @@
         {bytes(tip.value)}
         {#if total > 0}<span class="text-fg-subtle"> · {percent(tip.value / total)}</span>{/if}
       </div>
-      {#if tip.cart}
+      {#if tip.gone}
+        <div class="mt-0.5 text-[11.5px] text-danger">Deleted</div>
+      {:else if tip.cart}
         <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-danger">
           <Trash2 class="size-3" /> In cleanup cart
         </div>

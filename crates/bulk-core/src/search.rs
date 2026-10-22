@@ -189,7 +189,7 @@ fn rank(tree: &Tree, hits: &mut [Hit]) {
 
 fn matches(tree: &Tree, id: NodeId, q: &Query, finders: &[memchr::memmem::Finder]) -> Option<u8> {
     let n = tree.get(id);
-    if n.has(flags::DELETED) || n.has(flags::EXTRA_LINK) {
+    if n.has(flags::DELETED) || n.has(flags::GONE) || n.has(flags::EXTRA_LINK) {
         return None;
     }
     let is_dir = n.is_dir();
