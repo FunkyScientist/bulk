@@ -11,6 +11,10 @@ use crate::tree::{NodeId, Tree, flags};
 
 const FSCTL_QUERY_USN_JOURNAL: u32 = 0x0009_00F4;
 const FSCTL_READ_USN_JOURNAL: u32 = 0x0009_00BB;
+const FSCTL_CREATE_USN_JOURNAL: u32 = 0x0009_00E7;
+/// Same size Windows gives the system drive's journal.
+const JOURNAL_MAX: u64 = 32 << 20;
+const JOURNAL_DELTA: u64 = 8 << 20;
 const ERROR_JOURNAL_ENTRY_DELETED: i32 = 1181;
 const ERROR_JOURNAL_DELETE_IN_PROGRESS: i32 = 1178;
 const ERROR_JOURNAL_NOT_ACTIVE: i32 = 1179;
@@ -45,6 +49,21 @@ pub fn query(vol: &Volume) -> Result<Journal, JournalError> {
         first: i64::from_le_bytes(out[8..16].try_into().unwrap()),
         next: i64::from_le_bytes(out[16..24].try_into().unwrap()),
     })
+}
+
+/// Like `query`, but turns the journal on first if the volume doesn't have one, which
+/// is common on secondary drives. Without it the drive can't be kept live.
+pub fn ensure(vol: &Volume) -> Result<Journal, JournalError> {
+    match query(vol) {
+        Err(JournalError::Gap) => {
+            let mut input = [0u8; 16];
+            input[0..8].copy_from_slice(&JOURNAL_MAX.to_le_bytes());
+            input[8..16].copy_from_slice(&JOURNAL_DELTA.to_le_bytes());
+            vol.ioctl(FSCTL_CREATE_USN_JOURNAL, &input, &mut [])?;
+            query(vol)
+        }
+        r => r,
+    }
 }
 
 fn map_err(e: std::io::Error) -> JournalError {

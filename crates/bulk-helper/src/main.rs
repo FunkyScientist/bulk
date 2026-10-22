@@ -172,7 +172,7 @@ fn snapshot_all() -> anyhow::Result<()> {
         let progress = Progress::default();
         let (tree, journal, method) = if vol.is_ntfs() {
             let v = scan::mft::Volume::open(vol.letter)?;
-            let journal = usn::query(&v).ok();
+            let journal = usn::ensure(&v).ok();
             (
                 scan::mft::scan_volume(&v, vol.letter, &progress)?,
                 journal,
@@ -607,7 +607,7 @@ fn scan_drive(conn: &mut File, letter: char) -> anyhow::Result<()> {
         return Ok(());
     };
     // Note the journal position first, so nothing that changes mid-scan is missed.
-    if let Ok(j) = usn::query(&vol) {
+    if let Ok(j) = usn::ensure(&vol) {
         write_json(conn, &Event::Journal(j))?;
     }
     let start = Instant::now();
