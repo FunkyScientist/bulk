@@ -85,6 +85,26 @@ pub async fn enable_fast_scan(app: AppHandle) -> Res<HelperStatus> {
     Ok(status)
 }
 
+/// Remove the scheduled tasks (one UAC prompt). Scans fall back to the walker.
+#[tauri::command]
+pub async fn remove_fast_scan(app: AppHandle) -> Res<HelperStatus> {
+    let ok =
+        tauri::async_runtime::spawn_blocking(|| helper::uninstall_elevated(&helper::helper_exe()))
+            .await
+            .map_err(err)?
+            .map_err(err)?;
+    if !ok {
+        return Err("cancelled".into());
+    }
+    scan::set_helper_status(&app, HelperStatus::NotInstalled);
+    Ok(HelperStatus::NotInstalled)
+}
+
+#[tauri::command]
+pub fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 /// Whether startup snapshot loading has finished.
 #[tauri::command]
 pub fn restored(state: State<AppState>) -> bool {
@@ -206,6 +226,13 @@ pub fn node_path(state: State<AppState>, letter: char, id: NodeId) -> Res<String
 pub struct Crumb {
     id: NodeId,
     name: String,
+}
+
+/// Node for a full path, if it's in the scanned tree.
+#[tauri::command]
+pub fn find_path(state: State<AppState>, letter: char, path: String) -> Option<NodeId> {
+    let drives = state.drives.lock().unwrap();
+    drives.get(&letter)?.tree.as_ref()?.find_path(&path)
 }
 
 /// `id` and its ancestors, root first.

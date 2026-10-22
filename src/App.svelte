@@ -13,9 +13,11 @@
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import Toasts from '$lib/components/Toasts.svelte';
   import CartPanel from '$lib/components/CartPanel.svelte';
+  import SettingsDialog from '$lib/components/SettingsDialog.svelte';
 
   let palette = $state(false);
   let shortcuts = $state(false);
+  let settings = $state(false);
 
   $effect(() => {
     document.documentElement.dataset.theme = app.resolvedTheme;
@@ -25,6 +27,8 @@
     try {
       document.documentElement.dataset.backdrop = await api.backdrop();
       await app.init();
+      const opened = await api.takeOpenPath();
+      if (opened) void app.openPath(opened);
     } finally {
       // Hidden windows don't paint (so no requestAnimationFrame); a short timeout lets
       // the first layout settle before the window appears.
@@ -61,8 +65,8 @@
     } else if (e.key === '?') {
       e.preventDefault();
       shortcuts = !shortcuts;
-    } else if (e.key === 'Escape' && shortcuts) {
-      shortcuts = false;
+    } else if (e.key === 'Escape' && (shortcuts || settings || app.cartOpen)) {
+      shortcuts = settings = app.cartOpen = false;
     } else if (e.key === 'Delete' && drive && app.selected !== null && app.selected !== 0) {
       e.preventDefault();
       app.addToCart(drive.letter, [app.selected]);
@@ -89,7 +93,10 @@
 <div class="flex h-full flex-col">
   <TitleBar onSearch={() => (palette = true)} />
   <div class="flex min-h-0 flex-1">
-    <Sidebar onRescan={() => drive && app.scan(drive.letter)} />
+    <Sidebar
+      onRescan={() => drive && app.scan(drive.letter)}
+      onSettings={() => (settings = true)}
+    />
     <main class="min-w-0 flex-1 pr-2.5 pb-2.5">
       <div class="surface relative h-full overflow-hidden rounded-2xl border border-line bg-panel">
         {#if drive}
@@ -111,6 +118,7 @@
 <CommandPalette bind:open={palette} onShortcuts={() => (shortcuts = true)} />
 <Shortcuts bind:open={shortcuts} />
 <CartPanel />
+<SettingsDialog bind:open={settings} />
 <ContextMenu />
 <Toasts />
 

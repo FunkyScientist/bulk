@@ -58,6 +58,8 @@ pub enum Request {
         journal: u64,
         from: i64,
     },
+    /// Exit, e.g. so the exe can be replaced by an update.
+    Shutdown,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -225,6 +227,14 @@ impl Client {
         write_json(&mut c, &Request::Hello)?;
         let (_, body) = read_frame(&mut c)?;
         Ok(serde_json::from_slice(&body)?)
+    }
+
+    /// Ask a running helper to exit. Fine if none is running.
+    pub fn shutdown(&self) {
+        if let Ok(mut c) = self.connect() {
+            let _ = write_json(&mut c, &Request::Shutdown);
+            let _ = read_frame(&mut c);
+        }
     }
 
     /// Make sure the helper is up, starting its scheduled task if needed.

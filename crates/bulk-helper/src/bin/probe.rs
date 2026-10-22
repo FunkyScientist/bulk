@@ -10,11 +10,14 @@ use std::time::{Duration, Instant};
 use bulk_core::helper::{self, Client};
 
 fn main() -> anyhow::Result<()> {
-    let letter = std::env::args()
-        .nth(1)
-        .and_then(|s| s.chars().next())
-        .unwrap_or('C');
+    let arg = std::env::args().nth(1).unwrap_or_default();
     let client = Client::new()?;
+    if arg == "--shutdown" {
+        // Used by `pnpm dev:app` so the helper exe can be rebuilt.
+        client.shutdown();
+        return Ok(());
+    }
+    let letter = arg.chars().next().unwrap_or('C');
 
     let t0 = Instant::now();
     if !client.ensure_running(Duration::from_secs(5)) {

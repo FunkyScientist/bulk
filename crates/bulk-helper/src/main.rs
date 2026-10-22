@@ -24,7 +24,9 @@ use bulk_core::helper::{
     write_frame_header, write_json,
 };
 use bulk_core::scan::{self, Progress};
-use bulk_core::usn;
+use bulk_core::{snapshot, usn};
+
+const SNAPSHOT_TASK: &str = r"Bulk\DailySnapshot";
 use windows_sys::Win32::Foundation::{
     CloseHandle, ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE, LocalFree,
 };
@@ -55,8 +57,9 @@ fn main() {
         Some("--serve") => serve(user),
         Some("--install") => install(user),
         Some("--uninstall") => uninstall(),
+        Some("--snapshot-all") => snapshot_all(),
         _ => Err(anyhow::anyhow!(
-            "usage: bulk-helper --serve|--install|--uninstall"
+            "usage: bulk-helper --serve|--install|--uninstall|--snapshot-all"
         )),
     };
     if let Err(e) = result {
@@ -87,25 +90,8 @@ fn install(user: Option<String>) -> anyhow::Result<()> {
     let sid = user.context("--install needs --user <SID>")?;
     anyhow::ensure!(valid_sid(&sid), "bad SID");
     let exe = std::env::current_exe()?;
-    let xml = task_xml(&sid, &exe);
-
-    // schtasks wants the XML as UTF-16 with a BOM.
-    let path = std::env::temp_dir().join(format!("bulk-task-{}.xml", std::process::id()));
-    let mut bytes = vec![0xFF, 0xFE];
-    bytes.extend(xml.encode_utf16().flat_map(u16::to_le_bytes));
-    std::fs::write(&path, bytes)?;
-    let out = Command::new("schtasks")
-        .args(["/Create", "/TN", TASK_NAME, "/F", "/XML"])
-        .arg(&path)
-        .creation_flags(CREATE_NO_WINDOW)
-        .output();
-    let _ = std::fs::remove_file(&path);
-    let out = out?;
-    anyhow::ensure!(
-        out.status.success(),
-        "schtasks failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    register_task(TASK_NAME, &task_xml(&sid, &exe))?;
+    register_task(SNAPSHOT_TASK, &snapshot_task_xml(&sid, &exe))?;
     // An older helper may still own the pipe; stop it so the new one takes over.
     let _ = Command::new("taskkill")
         .args(["/F", "/IM", "bulk-helper.exe", "/FI"])
@@ -115,12 +101,92 @@ fn install(user: Option<String>) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn register_task(name: &str, xml: &str) -> anyhow::Result<()> {
+    // schtasks wants the XML as UTF-16 with a BOM.
+    let path = std::env::temp_dir().join(format!("bulk-task-{}.xml", std::process::id()));
+    let mut bytes = vec![0xFF, 0xFE];
+    bytes.extend(xml.encode_utf16().flat_map(u16::to_le_bytes));
+    std::fs::write(&path, bytes)?;
+    let out = Command::new("schtasks")
+        .args(["/Create", "/TN", name, "/F", "/XML"])
+        .arg(&path)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    let _ = std::fs::remove_file(&path);
+    let out = out?;
+    anyhow::ensure!(
+        out.status.success(),
+        "schtasks failed for {name}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    Ok(())
+}
+
 fn uninstall() -> anyhow::Result<()> {
+    let _ = Command::new("schtasks")
+        .args(["/Delete", "/TN", SNAPSHOT_TASK, "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
     let out = Command::new("schtasks")
         .args(["/Delete", "/TN", TASK_NAME, "/F"])
         .creation_flags(CREATE_NO_WINDOW)
         .output()?;
     anyhow::ensure!(out.status.success(), "schtasks /Delete failed");
+    Ok(())
+}
+
+/// What the daily task runs: snapshot every local drive that's due, per the
+/// user's settings. Cheap when nothing is due, so the task can fire often.
+fn snapshot_all() -> anyhow::Result<()> {
+    let settings = bulk_core::settings::load();
+    if !settings.auto_snapshots {
+        return Ok(());
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs();
+    for vol in bulk_core::volume::list()
+        .into_iter()
+        .filter(|v| v.auto_scan())
+    {
+        let last = snapshot::history(vol.serial)
+            .first()
+            .map_or(0, |e| e.meta.taken);
+        if now.saturating_sub(last) < settings.snapshot_every.min_gap_secs() {
+            continue;
+        }
+        let progress = Progress::default();
+        let (tree, journal, method) = if vol.is_ntfs() {
+            let v = scan::mft::Volume::open(vol.letter)?;
+            let journal = usn::query(&v).ok();
+            (
+                scan::mft::scan_volume(&v, vol.letter, &progress)?,
+                journal,
+                "mft",
+            )
+        } else {
+            (
+                scan::walk::walk(&vol.root, vol.cluster as u64, &progress)?,
+                None,
+                "walk",
+            )
+        };
+        let root = *tree.get(tree.root);
+        let meta = snapshot::Meta {
+            letter: vol.letter,
+            serial: vol.serial,
+            label: vol.label.clone(),
+            taken: now,
+            method: method.into(),
+            files: root.files,
+            alloc: root.alloc,
+            size: root.size,
+            journal,
+        };
+        snapshot::save_history(&meta, &tree, settings.history_keep.clamp(1, 365))?;
+        snapshot::save_current(&meta, &tree)?;
+        log(&format!("snapshot {}: {} files", vol.letter, root.files));
+    }
     Ok(())
 }
 
@@ -167,6 +233,57 @@ fn task_xml(sid: &str, exe: &Path) -> String {
     <Exec>
       <Command>"{exe}"</Command>
       <Arguments>--serve --user {sid}</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+"#
+    )
+}
+
+/// Fires daily at noon and shortly after logon (so a PC that was off at noon still
+/// gets one); `--snapshot-all` skips drives that already have a recent snapshot.
+fn snapshot_task_xml(sid: &str, exe: &Path) -> String {
+    let exe = xml_escape(&exe.to_string_lossy());
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Saves a snapshot of your drives so Bulk can show what changed over time.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2024-01-01T12:00:00</StartBoundary>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+    <LogonTrigger>
+      <UserId>{sid}</UserId>
+      <Delay>PT10M</Delay>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{sid}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <Enabled>true</Enabled>
+    <ExecutionTimeLimit>PT2H</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>"{exe}"</Command>
+      <Arguments>--snapshot-all</Arguments>
     </Exec>
   </Actions>
 </Task>
@@ -339,6 +456,10 @@ fn handle(mut conn: File, raw: isize) -> anyhow::Result<()> {
                 exe: std::env::current_exe()?.to_string_lossy().into_owned(),
             },
         )?,
+        Request::Shutdown => {
+            write_json(&mut conn, &Event::Done { elapsed_ms: 0 })?;
+            std::process::exit(0);
+        }
         Request::Scan { letter } => scan_drive(&mut conn, letter)?,
         Request::Changes {
             letter,

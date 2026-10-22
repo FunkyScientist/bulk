@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:app": "(cargo build -p bulk-helper || echo bulk-helper.exe is in use, keeping the running build) && vite",
+    "dev:app": "cargo run -q -p bulk-helper --bin probe -- --shutdown & (cargo build -p bulk-helper || echo bulk-helper.exe is in use, keeping the running build) && vite",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "format": "prettier --write .",

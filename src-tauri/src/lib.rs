@@ -5,30 +5,32 @@ mod history;
 mod live;
 mod scan;
 mod settings;
+mod shell;
 mod state;
 mod win;
 
 use tauri::Manager;
 
 pub fn run() {
+    let opened = shell::open_arg(&std::env::args().collect::<Vec<_>>());
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            }
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            shell::on_second_instance(app, args);
         }))
         .plugin(tauri_plugin_dialog::init())
         .manage(state::AppState::default())
         .manage(scan::HelperState::default())
         .manage(cart::CartState::default())
         .manage(dupes::DupesState::default())
+        .manage(shell::OpenState(std::sync::Mutex::new(opened)))
         .manage(settings::SettingsState(std::sync::Mutex::new(
-            settings::load(),
+            bulk_core::settings::load(),
         )))
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
             win::apply_backdrop(&window);
+            // Keep the Explorer entry pointing at this copy of the app.
+            let _ = shell::set_explorer_menu(settings::get(app.handle()).explorer_menu);
             scan::init_drives(app.handle());
             live::restore(app.handle().clone());
             scan::check_helper(app.handle().clone());
@@ -39,6 +41,7 @@ pub fn run() {
             commands::restored,
             commands::helper_status,
             commands::enable_fast_scan,
+            commands::remove_fast_scan,
             commands::scan,
             commands::cancel_scan,
             commands::rows,
@@ -46,6 +49,7 @@ pub fn run() {
             commands::set_sort,
             commands::reveal,
             commands::node_path,
+            commands::find_path,
             commands::ancestors,
             commands::treemap,
             commands::sunburst,
@@ -54,6 +58,7 @@ pub fn run() {
             commands::show_in_explorer,
             commands::open_path,
             commands::backdrop,
+            commands::app_version,
             history::history,
             history::diff_open,
             history::diff_children,
@@ -66,6 +71,10 @@ pub fn run() {
             cart::cart_undo,
             dupes::dupes_start,
             dupes::dupes_cancel,
+            settings::settings_get,
+            settings::settings_set,
+            settings::snapshot_storage,
+            shell::take_open_path,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Bulk");

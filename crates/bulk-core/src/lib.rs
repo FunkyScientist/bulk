@@ -7,6 +7,7 @@ pub mod helper;
 pub mod layout;
 pub mod scan;
 pub mod search;
+pub mod settings;
 pub mod snapshot;
 pub mod trash;
 pub mod tree;

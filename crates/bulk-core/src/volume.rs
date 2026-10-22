@@ -3,7 +3,6 @@
 use serde::Serialize;
 use windows_sys::Win32::Storage::FileSystem::{
     GetDiskFreeSpaceExW, GetDiskFreeSpaceW, GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW,
-    GetVolumeNameForVolumeMountPointW,
 };
 
 use crate::wide::{from_wide, wide};
@@ -135,10 +134,17 @@ pub fn query(letter: char) -> Option<Volume> {
     })
 }
 
-/// Real disk volumes have a `\\?\Volume{GUID}\` name; driver-mounted drives don't.
+/// Disk partitions (internal, USB, mounted VHDs) map to `\Device\HarddiskVolumeN`.
+/// Drives mounted by apps such as Google Drive map elsewhere, e.g.
+/// `\Device\Volume{GUID}`, and that holds in elevated processes too.
 fn is_disk_volume(wroot: &[u16]) -> bool {
-    let mut name = [0u16; 64];
-    unsafe {
-        GetVolumeNameForVolumeMountPointW(wroot.as_ptr(), name.as_mut_ptr(), name.len() as u32) != 0
+    use windows_sys::Win32::Storage::FileSystem::QueryDosDeviceW;
+    // "C:" without the trailing backslash.
+    let dev: Vec<u16> = wroot[..2].iter().copied().chain([0]).collect();
+    let mut buf = [0u16; 512];
+    let n = unsafe { QueryDosDeviceW(dev.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) };
+    if n == 0 {
+        return false;
     }
+    from_wide(&buf).starts_with(r"\Device\HarddiskVolume")
 }

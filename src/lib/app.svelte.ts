@@ -96,6 +96,8 @@ class AppState {
     // The change journal couldn't cover the gap since the last snapshot.
     await listen<string>('needs-rescan', (e) => void this.scan(e.payload));
     await listen('cart-changed', async () => (this.cart = await api.cartGet()));
+    // "Analyze with Bulk" from Explorer while we're already open.
+    await listen<string>('open-path', (e) => void this.openPath(e.payload));
     this.cart = await api.cartGet();
     const [drives, helper] = await Promise.all([api.drives(), api.helperStatus()]);
     this.drives = drives;
@@ -153,6 +155,33 @@ class AppState {
   selectNode(id: number, reveal = false) {
     this.selected = id;
     if (reveal) this.revealRequest = { id, seq: (this.revealRequest?.seq ?? 0) + 1 };
+  }
+
+  /** Show a folder from Explorer: switch to its drive, scanning first if needed. */
+  async openPath(path: string) {
+    const letter = path[0].toUpperCase();
+    if (!this.drives.some((d) => d.letter === letter)) await this.refreshDrives();
+    if (!this.drives.some((d) => d.letter === letter)) {
+      this.toast(`Drive ${letter}: isn't available`, { tone: 'error' });
+      return;
+    }
+    this.select(letter);
+    // Wait out startup restore, then scan if there's still nothing to show.
+    for (let i = 0; i < 100 && !(await api.restored()); i++)
+      await new Promise((r) => setTimeout(r, 50));
+    await this.refreshDrives();
+    if (!this.drive?.scanned) await this.scan(letter);
+    const id = await api.findPath(letter, path);
+    if (id === null) {
+      this.toast(`Couldn't find ${path}`, { tone: 'error' });
+      return;
+    }
+    this.tab = 'browse';
+    if (id === 0) this.setFocus(letter, null);
+    else {
+      this.setFocus(letter, id);
+      this.selectNode(id, true);
+    }
   }
 
   /** Jump to a node: switch drive and tab, reveal it in the list and show its folder. */

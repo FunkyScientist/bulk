@@ -33,9 +33,6 @@ pub enum DupesEvent {
         elapsed_ms: u64,
         candidates: usize,
     },
-    Error {
-        message: String,
-    },
     Cancelled,
 }
 

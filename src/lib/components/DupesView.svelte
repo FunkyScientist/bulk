@@ -43,13 +43,14 @@
     picked = {};
     progress = null;
     await api.dupesStart(letter, inFolder ? focus : null, minSize, skipSystem, (e) => {
+      if (e.type === 'cancelled') running = false;
       if (e.type === 'progress') progress = e;
       else {
         running = false;
         if (e.type === 'done') {
           groups = e.groups;
           meta = { ms: e.elapsedMs, candidates: e.candidates };
-        } else if (e.type === 'error') error = e.message;
+        }
       }
     });
   }

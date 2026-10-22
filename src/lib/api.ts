@@ -238,10 +238,23 @@ export type DupesEvent =
       bytesTotal: number;
     }
   | { type: 'done'; groups: DupeGroup[]; elapsedMs: number; candidates: number }
-  | { type: 'error'; message: string }
   | { type: 'cancelled' };
 
+export interface Settings {
+  autoSnapshots: boolean;
+  snapshotEvery: 'daily' | 'weekly';
+  historyKeep: number;
+  explorerMenu: boolean;
+}
+
 export const api = {
+  settingsGet: () => invoke<Settings>('settings_get'),
+  settingsSet: (settings: Settings) => invoke<Settings>('settings_set', { settings }),
+  snapshotStorage: () => invoke<{ path: string; bytes: number; files: number }>('snapshot_storage'),
+  removeFastScan: () => invoke<HelperStatus>('remove_fast_scan'),
+  appVersion: () => invoke<string>('app_version'),
+  takeOpenPath: () => invoke<string | null>('take_open_path'),
+  findPath: (letter: string, path: string) => invoke<number | null>('find_path', { letter, path }),
   dupesStart(
     letter: string,
     root: number | null,
