@@ -28,6 +28,7 @@ fn main() -> anyhow::Result<()> {
             last = p.files / 250_000;
             println!("  {:>5.2}s  {} files", t1.elapsed().as_secs_f64(), p.files);
         }
+        true
     })?;
     let root = tree.get(tree.root);
     println!(

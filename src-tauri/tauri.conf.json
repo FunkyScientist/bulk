@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "app.bulk.desktop",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm dev:app",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
@@ -21,8 +21,7 @@
         "decorations": false,
         "transparent": true,
         "center": true,
-        "visible": false,
-        "windowEffects": { "effects": ["mica"] }
+        "visible": false
       }
     ],
     "security": {

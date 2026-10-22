@@ -192,8 +192,13 @@ impl Client {
         false
     }
 
-    /// MFT scan through the helper. Drop-in for `scan::mft::scan`.
-    pub fn scan(&self, letter: char, mut on_progress: impl FnMut(ProgressInfo)) -> anyhow::Result<Tree> {
+    /// MFT scan through the helper. Return `false` from `on_progress` to cancel;
+    /// dropping the connection stops the helper's scan too.
+    pub fn scan(
+        &self,
+        letter: char,
+        mut on_progress: impl FnMut(ProgressInfo) -> bool,
+    ) -> anyhow::Result<Tree> {
         let mut c = self.connect()?;
         write_json(&mut c, &Request::Scan { letter })?;
         let mut tree = None;
@@ -208,7 +213,11 @@ impl Client {
             let mut body = vec![0u8; len as usize];
             c.read_exact(&mut body)?;
             match serde_json::from_slice::<Event>(&body)? {
-                Event::Progress(p) => on_progress(p),
+                Event::Progress(p) => {
+                    if !on_progress(p) {
+                        anyhow::bail!("scan cancelled");
+                    }
+                }
                 Event::Error { message } => anyhow::bail!(message),
                 Event::Done { .. } => break,
                 Event::Hello { .. } => {}
