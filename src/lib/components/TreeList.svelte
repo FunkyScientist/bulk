@@ -335,6 +335,11 @@
                   style="background: color-mix(in oklab, var(--danger) 12%, transparent)"
                   >Deleted</span
                 >
+              {:else if row.flags & Flags.NEW}
+                <span
+                  class="shrink-0 rounded px-1 text-[10.5px] font-medium text-ok"
+                  style="background: color-mix(in oklab, var(--ok) 14%, transparent)">New</span
+                >
               {/if}
             </div>
             {#if showShare}

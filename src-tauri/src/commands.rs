@@ -416,8 +416,11 @@ fn encode_shapes(
         }
         body.extend_from_slice(&s.id.to_le_bytes());
         let mut flags = s.flags;
-        if tree.get(s.id).has(bulk_core::tree::flags::GONE) {
+        let node = tree.get(s.id);
+        if node.has(bulk_core::tree::flags::GONE) {
             flags |= bulk_core::layout::tile_flags::GONE;
+        } else if node.has(bulk_core::tree::flags::NEW) {
+            flags |= bulk_core::layout::tile_flags::NEW;
         }
         if !carted.is_empty() {
             use bulk_core::layout::tile_flags::{CART_ROOT, IN_CART};

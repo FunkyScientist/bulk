@@ -25,6 +25,8 @@ pub mod flags {
     /// Deleted while the app watched. Kept in place (greyed out in the UI) until the
     /// next scan, but no longer counted in any totals and skipped by `children`.
     pub const GONE: u16 = 1 << 10;
+    /// Appeared while the app watched. Highlighted in the UI until the next scan.
+    pub const NEW: u16 = 1 << 11;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -417,6 +419,8 @@ impl Tree {
     /// every ancestor's totals adjusted.
     pub fn merge_folder(&mut self, target: NodeId, sub: &Tree, from: NodeId) {
         let before = self.nodes[target as usize];
+        // Freshly scanned, so no longer "new since the last scan".
+        self.nodes[target as usize].flags &= !flags::NEW;
         self.merge_children(target, sub, from);
         self.aggregate_from(target);
         let after = self.nodes[target as usize];
@@ -679,7 +683,8 @@ impl Tree {
             let kids: Vec<NodeId> = self.children(src).collect();
             for &c in kids.iter().rev() {
                 let n = self.nodes[c as usize];
-                let id = out.add(dst, self.name(c), n.flags, n.size, n.alloc, n.mtime, n.frn);
+                let f = n.flags & !flags::NEW;
+                let id = out.add(dst, self.name(c), f, n.size, n.alloc, n.mtime, n.frn);
                 out.nodes[id as usize].files = n.files;
                 stack.push((c, id));
             }

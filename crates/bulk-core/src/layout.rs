@@ -34,6 +34,8 @@ pub mod tile_flags {
     pub const CART_ROOT: u8 = 32;
     /// Deleted while the app watched; drawn greyed out. Set by the app.
     pub const GONE: u8 = 64;
+    /// Appeared while the app watched; drawn highlighted. Set by the app.
+    pub const NEW: u8 = 128;
 }
 
 #[derive(Clone, Copy, Debug)]

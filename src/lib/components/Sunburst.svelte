@@ -215,6 +215,12 @@
         ctx.globalAlpha = alpha * (dark ? 0.32 : 0.28);
         ctx.fill();
       }
+      if (f & TileFlags.NEW) {
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = css('--ok');
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
       if (f & TileFlags.CART_ROOT) {
         ctx.globalAlpha = alpha;
         ctx.strokeStyle = danger;
@@ -356,6 +362,7 @@
       value: arcs.value[hover],
       cart: !!(arcs.flags[hover] & TileFlags.IN_CART),
       gone: !!(arcs.flags[hover] & TileFlags.GONE),
+      added: !!(arcs.flags[hover] & TileFlags.NEW),
     };
   });
   // Path relative to the folder the chart shows, e.g. `SubFolder\Item.ext`.
@@ -479,6 +486,8 @@
         <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-danger">
           <Trash2 class="size-3" /> In cleanup cart
         </div>
+      {:else if tip.added}
+        <div class="mt-0.5 text-[11.5px] text-ok">New since the last scan</div>
       {/if}
     </div>
   {/if}

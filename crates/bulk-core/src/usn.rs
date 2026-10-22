@@ -236,7 +236,8 @@ fn apply_one(
         Some(old) if tree.get(old).frn != s.frn => {
             tree.remove(old);
             index.0.remove(&rec);
-            let id = tree.add_live(parent, name, s.flags, s.size, s.alloc, s.mtime, s.frn);
+            let f = s.flags | flags::NEW;
+            let id = tree.add_live(parent, name, f, s.size, s.alloc, s.mtime, s.frn);
             index.0.insert(rec, id);
         }
         Some(id) => {
@@ -254,17 +255,18 @@ fn apply_one(
                 tree.rename(id, name);
             }
             if is_dir {
-                let keep = n.flags & (flags::DIR | flags::EXTRA_LINK | flags::DELETED);
+                let keep = n.flags & (flags::DIR | flags::EXTRA_LINK | flags::DELETED | flags::NEW);
                 tree.get_mut(id).flags = keep | (s.flags & !flags::DIR);
             } else {
-                let keep = n.flags & (flags::EXTRA_LINK | flags::DELETED);
+                let keep = n.flags & (flags::EXTRA_LINK | flags::DELETED | flags::NEW);
                 tree.get_mut(id).flags = keep | s.flags;
                 tree.set_size(id, s.size, s.alloc, s.mtime);
             }
         }
         None => {
             tree.drop_ghosts_named(parent, name);
-            let id = tree.add_live(parent, name, s.flags, s.size, s.alloc, s.mtime, s.frn);
+            let f = s.flags | flags::NEW;
+            let id = tree.add_live(parent, name, f, s.size, s.alloc, s.mtime, s.frn);
             index.0.insert(rec, id);
         }
     }
@@ -321,8 +323,14 @@ mod tests {
         assert_eq!(t.get(a).parent, t.root);
         assert_eq!(t.get(docs).size, 7);
         assert_eq!(t.get(t.root).size, 57);
-        assert!(t.find_path("C:\\Docs\\New\\new.bin").is_some());
+        let new = t.find_path("C:\\Docs\\New\\new.bin").unwrap();
+        assert!(t.get(new).has(flags::NEW));
+        assert!(!t.get(a).has(flags::NEW));
         assert!(t.find_path("C:\\b.txt").is_none());
+        // Saved snapshots start clean.
+        let c = t.compact();
+        let saved = c.find_path("C:\\Docs\\New\\new.bin").unwrap();
+        assert!(!c.get(saved).has(flags::NEW));
     }
 
     #[test]

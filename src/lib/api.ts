@@ -69,6 +69,8 @@ export const Flags = {
   META: 1 << 9,
   /** Deleted while watched; shown greyed out until the next scan. */
   GONE: 1 << 10,
+  /** Appeared while watched; highlighted until the next scan. */
+  NEW: 1 << 11,
 } as const;
 
 export interface NodeInfo {
@@ -97,6 +99,7 @@ export const TileFlags = {
   IN_CART: 16,
   CART_ROOT: 32,
   GONE: 64,
+  NEW: 128,
 } as const;
 
 /** Treemap tiles in struct-of-arrays form, straight from the binary response. */

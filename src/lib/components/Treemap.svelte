@@ -121,6 +121,8 @@
     const accent = css('--accent');
     const danger = css('--danger');
     const cartRoots: number[] = [];
+    const added: number[] = [];
+    const ok = css('--ok');
     ctx.textBaseline = 'middle';
 
     for (let i = 0; i < t.count; i++) {
@@ -174,6 +176,7 @@
         ctx.globalAlpha = 1;
       }
       if (f & TileFlags.CART_ROOT) cartRoots.push(i);
+      if (f & TileFlags.NEW) added.push(i);
       if (f & TileFlags.GONE && rw > 3 && rh > 3) {
         ctx.strokeStyle = muted;
         ctx.globalAlpha = 0.5;
@@ -214,6 +217,24 @@
           ctx.fillText(ellipsize(bytes(t.value[i]), w - 10, 5.8), x + 5, cy + 13);
           ctx.globalAlpha = 1;
         }
+      }
+    }
+
+    // New since the last scan: a green outline and a corner dot, on top of their contents.
+    ctx.strokeStyle = ok;
+    ctx.fillStyle = ok;
+    ctx.lineWidth = 1.5;
+    for (const i of added) {
+      const w = t.w[i] - 1.5;
+      const h = t.h[i] - 1.5;
+      if (w < 3 || h < 3) continue;
+      ctx.beginPath();
+      ctx.roundRect(t.x[i] + 0.75, t.y[i] + 0.75, w, h, Math.min(4, w / 4, h / 4));
+      ctx.stroke();
+      if (w >= 14 && h >= 14) {
+        ctx.beginPath();
+        ctx.arc(t.x[i] + t.w[i] - 6, t.y[i] + 6, 2.5, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
@@ -435,6 +456,7 @@
       dir: !!(tiles.flags[hover] & TileFlags.DIR),
       cart: !!(tiles.flags[hover] & TileFlags.IN_CART),
       gone: !!(tiles.flags[hover] & TileFlags.GONE),
+      added: !!(tiles.flags[hover] & TileFlags.NEW),
     };
   });
 
@@ -537,6 +559,8 @@
         <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-danger">
           <Trash2 class="size-3" /> In cleanup cart
         </div>
+      {:else if tip.added}
+        <div class="mt-0.5 text-[11.5px] text-ok">New since the last scan</div>
       {/if}
     </div>
   {/if}
