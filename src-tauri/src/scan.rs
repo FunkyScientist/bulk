@@ -8,6 +8,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use bulk_core::helper::{self, Client, Event, ProgressInfo};
 use bulk_core::scan::{Progress, walk};
 use bulk_core::snapshot;
+use bulk_core::tree::NodeId;
 use bulk_core::usn::Journal;
 use bulk_core::volume;
 use serde::Serialize;
@@ -211,6 +212,98 @@ pub fn start(app: AppHandle, letter: char, channel: Channel<ScanEvent>) -> Resul
             Err(e) => {
                 let _ = channel.send(ScanEvent::Error {
                     message: format!("{e:#}"),
+                });
+            }
+        }
+    });
+    Ok(())
+}
+
+/// Folders with more files than this are rescanned from the file table when the
+/// helper is available.
+const HELPER_FOLDER_FILES: u32 = 50_000;
+
+/// Rescan one folder with the folder walker (or the helper, for huge folders) and merge it into the drive's tree.
+/// Live updates keep running; the drive is saved again on exit.
+pub fn start_folder(
+    app: AppHandle,
+    letter: char,
+    folder: NodeId,
+    channel: Channel<ScanEvent>,
+) -> Result<(), String> {
+    let (path, cluster, progress, via_helper) = {
+        let state = app.state::<AppState>();
+        let mut drives = state.drives.lock().unwrap();
+        let d = drives.get_mut(&letter).ok_or("unknown drive")?;
+        if d.scan.is_some() {
+            return Err("already scanning".into());
+        }
+        let tree = d.tree.as_ref().ok_or("not scanned")?;
+        if folder as usize >= tree.len() || !tree.get(folder).is_dir() {
+            return Err("not a folder".into());
+        }
+        // Walking a huge folder takes longer than reading the whole file table.
+        let via_helper = d.vol.is_ntfs()
+            && tree.get(folder).files > HELPER_FOLDER_FILES
+            && helper_ready(&app);
+        let p = Arc::new(Progress::default());
+        d.scan = Some(p.clone());
+        (tree.path(folder), d.vol.cluster as u64, p, via_helper)
+    };
+
+    std::thread::spawn(move || {
+        let t0 = Instant::now();
+        let method = if via_helper { "mft" } else { "walk" };
+        let _ = channel.send(ScanEvent::Started { method });
+        // The fresh tree, and the folder within it to merge from.
+        let result = if via_helper {
+            scan_via_helper(letter, &progress, &channel).and_then(|(t, _)| {
+                let from = t
+                    .find_path(&path)
+                    .ok_or_else(|| anyhow::anyhow!("{path} no longer exists"))?;
+                Ok((t, from))
+            })
+        } else {
+            scan_via_walk(&path, cluster, &progress, &channel).map(|(t, _)| {
+                let root = t.root;
+                (t, root)
+            })
+        };
+
+        let state = app.state::<AppState>();
+        let mut drives = state.drives.lock().unwrap();
+        let Some(d) = drives.get_mut(&letter) else {
+            return;
+        };
+        d.scan = None;
+        // Find the folder again by path: it may have moved while we were walking.
+        let target = d.tree.as_ref().and_then(|t| t.find_path(&path));
+        match (result, target) {
+            (Ok((fresh, from)), Some(target)) => {
+                let tree = d.tree.as_mut().unwrap();
+                tree.merge_folder(target, &fresh, from);
+                let n = *tree.get(target);
+                d.view.rebuild(d.tree.as_ref().unwrap());
+                d.dirty = true;
+                drop(drives);
+                let _ = channel.send(ScanEvent::Done {
+                    elapsed_ms: t0.elapsed().as_millis() as u64,
+                    files: n.files,
+                    alloc: n.alloc,
+                });
+                let _ = app.emit("drive-updated", letter);
+            }
+            (Err(_), _) if progress.cancelled() => {
+                let _ = channel.send(ScanEvent::Cancelled);
+            }
+            (Err(e), _) => {
+                let _ = channel.send(ScanEvent::Error {
+                    message: format!("{e:#}"),
+                });
+            }
+            (Ok(_), None) => {
+                let _ = channel.send(ScanEvent::Error {
+                    message: format!("{path} no longer exists"),
                 });
             }
         }

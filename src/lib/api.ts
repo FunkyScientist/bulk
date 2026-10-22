@@ -301,10 +301,11 @@ export const api = {
   restored: () => invoke<boolean>('restored'),
   helperStatus: () => invoke<HelperStatus>('helper_status'),
   enableFastScan: () => invoke<HelperStatus>('enable_fast_scan'),
-  scan(letter: string, onEvent: (e: ScanEvent) => void) {
+  /** Scan a drive, or just `folder` within it when given. */
+  scan(letter: string, folder: number | null, onEvent: (e: ScanEvent) => void) {
     const ch = new Channel<ScanEvent>();
     ch.onmessage = onEvent;
-    return invoke<void>('scan', { letter, onEvent: ch });
+    return invoke<void>('scan', { letter, folder, onEvent: ch });
   },
   cancelScan: (letter: string) => invoke<void>('cancel_scan', { letter }),
   rows: (letter: string, start: number, count: number) =>

@@ -17,8 +17,50 @@
   import DupesView from './DupesView.svelte';
   import Share from '@lucide/svelte/icons/share';
   import { exportMenu } from '$lib/exporting';
+  import { api } from '$lib/api';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import FolderSync from '@lucide/svelte/icons/folder-sync';
+  import HardDrive from '@lucide/svelte/icons/hard-drive';
 
   let { drive }: { drive: Drive } = $props();
+
+  // The folder open in the chart; "Rescan" covers just that by default.
+  let folderName = $state<string | null>(null);
+  $effect(() => {
+    const id = app.focus[drive.letter] ?? null;
+    const letter = drive.letter;
+    if (id === null) {
+      folderName = null;
+      return;
+    }
+    api.nodeInfo(letter, id).then((i) => {
+      if ((app.focus[letter] ?? null) === id) folderName = i.name;
+    });
+  });
+
+  function rescanMenu(e: MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const at = { clientX: r.right - 220, clientY: r.bottom + 6, preventDefault() {} } as MouseEvent;
+    const letter = drive.letter;
+    app.openMenu(at, [
+      ...(folderName
+        ? [
+            {
+              label: `Rescan ${folderName}`,
+              icon: FolderSync,
+              hint: 'Ctrl R',
+              run: () => app.scanFolder(letter),
+            },
+          ]
+        : []),
+      {
+        label: `Rescan whole ${letter}: drive`,
+        icon: HardDrive,
+        hint: folderName ? 'Ctrl Shift R' : 'Ctrl R',
+        run: () => app.scan(letter),
+      },
+    ]);
+  }
   const scan = $derived(app.scans[drive.letter]);
   const scanning = $derived(app.isScanning(drive.letter));
 
@@ -108,7 +150,7 @@
           in:fly={{ y: -6, duration: 260, easing: cubicOut }}
         >
           <span class="dot"></span>
-          Rescanning · {count(scan.progress.files)} files
+          Rescanning{scan.folder ? ` ${scan.folder}` : ''} · {count(scan.progress.files)} files
           <button
             class="pressable -mr-1 grid size-4 place-items-center rounded-full hover:bg-hover"
             aria-label="Cancel scan"
@@ -123,13 +165,29 @@
       >
         <Share class="size-3.5" /> Export
       </button>
-      <button
-        class="pressable flex h-7 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[12px] text-fg-muted hover:border-line-strong hover:text-fg disabled:opacity-50"
-        disabled={scanning}
-        onclick={() => app.scan(drive.letter)}
+<div
+        class="flex h-7 shrink-0 items-stretch rounded-lg border border-line text-[12px] whitespace-nowrap text-fg-muted transition-colors hover:border-line-strong"
+        class:opacity-50={scanning}
       >
-        <RefreshCw class="size-3.5 {scanning ? 'animate-spin' : ''}" /> Rescan
-      </button>
+        <button
+          class="pressable flex items-center gap-1.5 rounded-l-lg pr-2 pl-2.5 hover:bg-hover hover:text-fg"
+          disabled={scanning}
+          title={folderName ? `Rescan ${folderName} (Ctrl R)` : 'Rescan the drive (Ctrl R)'}
+          onclick={() => app.scanFolder(drive.letter)}
+        >
+          <RefreshCw class="size-3.5 {scanning ? 'animate-spin' : ''}" />
+          {folderName ? 'Rescan folder' : 'Rescan'}
+        </button>
+        <span class="my-1.5 w-px bg-line"></span>
+        <button
+          class="pressable grid w-6 place-items-center rounded-r-lg hover:bg-hover hover:text-fg"
+          disabled={scanning}
+          aria-label="More rescan options"
+          onclick={rescanMenu}
+        >
+          <ChevronDown class="size-3.5" />
+        </button>
+      </div>
     </div>
   </div>
 

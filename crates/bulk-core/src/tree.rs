@@ -2,6 +2,8 @@
 //! one shared byte buffer. Children form an intrusive singly linked list so nodes can be
 //! added and removed cheaply when the change journal reports updates.
 
+use std::collections::HashMap;
+
 pub type NodeId = u32;
 pub const NONE: NodeId = u32::MAX;
 
@@ -351,9 +353,15 @@ impl Tree {
 
     /// Recompute folder totals bottom-up. Call after bulk construction.
     pub fn aggregate(&mut self) {
+        self.aggregate_from(self.root);
+    }
+
+    /// Recompute folder totals for `top` and everything below it. Ancestors of
+    /// `top` are left alone.
+    fn aggregate_from(&mut self, top: NodeId) {
         // Iterative post-order: push in pre-order, then fold in reverse.
-        let mut order: Vec<NodeId> = Vec::with_capacity(self.nodes.len());
-        let mut stack = vec![self.root];
+        let mut order: Vec<NodeId> = Vec::new();
+        let mut stack = vec![top];
         while let Some(id) = stack.pop() {
             order.push(id);
             let mut c = self.nodes[id as usize].first_child;
@@ -371,6 +379,9 @@ impl Tree {
             }
         }
         for &id in order.iter().rev() {
+            if id == top {
+                continue;
+            }
             let n = self.nodes[id as usize];
             if n.parent == NONE || n.has(flags::EXTRA_LINK) {
                 continue;
@@ -380,6 +391,82 @@ impl Tree {
             p.alloc += n.alloc;
             p.files += n.files;
             p.mtime = p.mtime.max(n.mtime);
+        }
+    }
+
+    /// Bring folder `target` in line with the same folder (`from`) in a fresh scan
+    /// `sub`. Items are matched by name, so existing ids (and the file ids live
+    /// updates rely on) survive; new items are added, missing ones removed, and
+    /// every ancestor's totals adjusted.
+    pub fn merge_folder(&mut self, target: NodeId, sub: &Tree, from: NodeId) {
+        let before = self.nodes[target as usize];
+        self.merge_children(target, sub, from);
+        self.aggregate_from(target);
+        let after = self.nodes[target as usize];
+        if !after.has(flags::EXTRA_LINK) {
+            self.propagate(
+                target,
+                after.size as i64 - before.size as i64,
+                after.alloc as i64 - before.alloc as i64,
+                after.files as i64 - before.files as i64,
+                after.mtime,
+            );
+        }
+    }
+
+    fn merge_children(&mut self, target: NodeId, sub: &Tree, from: NodeId) {
+        let mut old: HashMap<Vec<u8>, NodeId> = self
+            .children(target)
+            .map(|c| (self.name_lower(c).to_vec(), c))
+            .collect();
+        for sc in sub.children(from) {
+            let s = *sub.get(sc);
+            match old.remove(sub.name_lower(sc)) {
+                Some(oc) if self.nodes[oc as usize].is_dir() == s.is_dir() => {
+                    let o = &mut self.nodes[oc as usize];
+                    // Keep link and metadata flags only the MFT scan knows about.
+                    o.flags = s.flags | (o.flags & (flags::EXTRA_LINK | flags::META));
+                    o.mtime = s.mtime;
+                    if s.frn != 0 {
+                        o.frn = s.frn;
+                    }
+                    if s.is_dir() {
+                        self.merge_children(oc, sub, sc);
+                    } else {
+                        o.size = s.size;
+                        o.alloc = s.alloc;
+                    }
+                }
+                replaced => {
+                    if let Some(oc) = replaced {
+                        self.drop_subtree(oc);
+                    }
+                    self.copy_from(target, sub, sc);
+                }
+            }
+        }
+        for (_, oc) in old {
+            self.drop_subtree(oc);
+        }
+    }
+
+    /// Copy `from` and everything below it out of `sub` and under `parent`.
+    fn copy_from(&mut self, parent: NodeId, sub: &Tree, from: NodeId) {
+        let mut stack = vec![(from, parent)];
+        while let Some((sid, dest)) = stack.pop() {
+            let n = *sub.get(sid);
+            let id = self.add(dest, sub.name(sid), n.flags, n.size, n.alloc, n.mtime, n.frn);
+            stack.extend(sub.children(sid).map(|c| (c, id)));
+        }
+    }
+
+    /// Unlink and mark deleted without touching any totals.
+    fn drop_subtree(&mut self, id: NodeId) {
+        self.unlink(id);
+        let mut stack = vec![id];
+        while let Some(x) = stack.pop() {
+            stack.extend(self.children(x));
+            self.nodes[x as usize].flags |= flags::DELETED;
         }
     }
 
@@ -579,6 +666,29 @@ mod tests {
         t.add(t.root, "pagefile.sys", 0, 1000, 1000, 5, 0);
         t.aggregate();
         (t, users, a, b)
+    }
+
+    #[test]
+    fn merge_folder_keeps_ids_and_fixes_totals() {
+        let (mut t, users, a, b) = sample();
+        let mut fresh = Tree::new(r"C:\Users");
+        fresh.add(fresh.root, "A.BIN", 0, 300, 8192, 30, 0);
+        let docs = fresh.add(fresh.root, "Docs", flags::DIR, 0, 0, 0, 0);
+        fresh.add(docs, "c.pdf", 0, 10, 4096, 40, 0);
+        fresh.aggregate();
+
+        t.merge_folder(users, &fresh, fresh.root);
+
+        // a.bin matched (case-insensitively) and kept its id; B.txt is gone.
+        assert_eq!(t.get(a).size, 300);
+        assert!(t.get(b).has(flags::DELETED));
+        assert_eq!(t.child_count(users), 2);
+        let u = t.get(users);
+        assert_eq!((u.size, u.alloc, u.files), (310, 12288, 2));
+        let r = t.get(t.root);
+        assert_eq!((r.size, r.alloc, r.files), (1310, 13288, 3));
+        let pdf = t.find_path(r"C:\Users\Docs\c.pdf").unwrap();
+        assert_eq!(t.get(pdf).size, 10);
     }
 
     #[test]

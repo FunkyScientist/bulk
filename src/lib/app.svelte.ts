@@ -30,6 +30,8 @@ export interface ScanState {
   method: 'mft' | 'walk' | null;
   progress: Progress;
   startedAt: number;
+  /** Name of the folder being rescanned, when it isn't the whole drive. */
+  folder?: string;
   /** Set briefly after a scan finishes so the UI can celebrate it. */
   finished?: { elapsedMs: number; files: number };
   error?: string;
@@ -310,13 +312,26 @@ class AppState {
     return !!s && !s.finished && !s.error;
   }
 
-  /** Start a scan and resolve when it ends. */
-  scan(letter: string): Promise<void> {
+  /** Rescan the folder open in the chart, or the whole drive when none is. */
+  async scanFolder(letter: string) {
+    const id = this.focus[letter] ?? null;
+    if (id === null) return this.scan(letter);
+    const info = await api.nodeInfo(letter, id);
+    return this.scan(letter, { id, name: info.name });
+  }
+
+  /** Start a scan (of the drive, or one folder in it) and resolve when it ends. */
+  scan(letter: string, folder?: { id: number; name: string }): Promise<void> {
     if (this.isScanning(letter)) return Promise.resolve();
-    this.scans[letter] = { method: null, progress: { ...emptyProgress }, startedAt: Date.now() };
+    this.scans[letter] = {
+      method: null,
+      progress: { ...emptyProgress },
+      startedAt: Date.now(),
+      folder: folder?.name,
+    };
     return new Promise((resolve) => {
       api
-        .scan(letter, async (e) => {
+        .scan(letter, folder?.id ?? null, async (e) => {
           const s = this.scans[letter];
           if (!s) return;
           switch (e.type) {

@@ -57,7 +57,9 @@
       app.toggleSidebar();
     } else if ((ctrl && key === 'r') || e.key === 'F5') {
       e.preventDefault();
-      if (drive) app.scan(drive.letter);
+      // Shift: the whole drive. Otherwise just the folder open in the chart.
+      if (drive && e.shiftKey) app.scan(drive.letter);
+      else if (drive) app.scanFolder(drive.letter);
     } else if (ctrl && key === 'e' && drive && app.selected !== null) {
       e.preventDefault();
       const letter = drive.letter;

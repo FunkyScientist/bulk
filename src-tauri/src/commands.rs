@@ -114,8 +114,16 @@ pub fn restored(state: State<AppState>) -> bool {
 }
 
 #[tauri::command]
-pub fn scan(app: AppHandle, letter: char, on_event: Channel<ScanEvent>) -> Res<()> {
-    scan::start(app, letter, on_event)
+pub fn scan(
+    app: AppHandle,
+    letter: char,
+    folder: Option<NodeId>,
+    on_event: Channel<ScanEvent>,
+) -> Res<()> {
+    match folder {
+        Some(id) if id != 0 => scan::start_folder(app, letter, id, on_event),
+        _ => scan::start(app, letter, on_event),
+    }
 }
 
 #[tauri::command]
