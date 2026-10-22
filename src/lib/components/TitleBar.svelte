@@ -55,7 +55,7 @@
 
   <div class="ml-auto flex h-full items-center">
     <button
-      class="pressable relative mr-1 grid size-7 place-items-center rounded-md hover:bg-hover hover:text-fg {app
+      class="pressable relative mr-1 grid size-8 place-items-center rounded-md hover:bg-hover hover:text-fg {app
         .cart.length
         ? 'text-fg-muted'
         : 'text-fg-subtle'}"
@@ -64,7 +64,7 @@
       onclick={() => (app.cartOpen = !app.cartOpen)}
     >
       {#key app.cartBump}
-        <span class="bump grid place-items-center"><ShoppingCart class="size-3.5" /></span>
+        <span class="bump grid place-items-center"><ShoppingCart class="size-4" /></span>
       {/key}
       {#if app.cart.length}
         <span
@@ -74,38 +74,32 @@
       {/if}
     </button>
     <button
-      class="pressable mr-1 grid size-7 place-items-center rounded-md text-fg-subtle hover:bg-hover hover:text-fg"
+      class="pressable mr-1.5 grid size-8 place-items-center rounded-md text-fg-subtle hover:bg-hover hover:text-fg"
       title={themeLabel}
       aria-label={themeLabel}
       onclick={() => app.cycleTheme()}
     >
       {#key app.theme}
         <span class="theme-icon grid place-items-center">
-          {#if app.theme === 'system'}<Monitor
-              class="size-3.5"
-            />{:else if app.theme === 'dark'}<Moon class="size-3.5" />{:else}<Sun
-              class="size-3.5"
-            />{/if}
+          {#if app.theme === 'system'}<Monitor class="size-4" />{:else if app.theme === 'dark'}<Moon
+              class="size-4"
+            />{:else}<Sun class="size-4" />{/if}
         </span>
       {/key}
     </button>
 
     <button class="winbtn" aria-label="Minimize" onclick={() => win.minimize()}>
-      <svg viewBox="0 0 10 10"><path d="M0 5h10" /></svg>
+      <span aria-hidden="true">&#xE921;</span>
     </button>
     <button
       class="winbtn"
       aria-label={maximized ? 'Restore' : 'Maximize'}
       onclick={() => win.toggleMaximize()}
     >
-      {#if maximized}
-        <svg viewBox="0 0 10 10"><path d="M2 0h8v8M0 2h8v8H0z" /></svg>
-      {:else}
-        <svg viewBox="0 0 10 10"><path d="M0 0h10v10H0z" /></svg>
-      {/if}
+      <span aria-hidden="true">{@html maximized ? '&#xE923;' : '&#xE922;'}</span>
     </button>
     <button class="winbtn close" aria-label="Close" onclick={() => win.close()}>
-      <svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" /></svg>
+      <span aria-hidden="true">&#xE8BB;</span>
     </button>
   </div>
 </header>
@@ -121,12 +115,10 @@
       background-color 120ms ease,
       color 120ms ease;
   }
-  .winbtn svg {
-    width: 10px;
-    height: 10px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1;
+  .winbtn span {
+    font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+    font-size: 10px;
+    line-height: 1;
   }
   .winbtn:hover {
     background: var(--hover);

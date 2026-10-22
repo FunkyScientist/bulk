@@ -70,11 +70,11 @@
         <span in:fade={{ duration: 160, delay: 120 }}>
           <Tooltip content="Rescan drives" side="bottom">
             <button
-              class="pressable grid size-6 place-items-center rounded-md text-fg-subtle hover:bg-hover hover:text-fg"
+              class="pressable grid size-7 place-items-center rounded-md text-fg-subtle hover:bg-hover hover:text-fg"
               aria-label="Rescan drives"
               onclick={onRescan}
             >
-              <RefreshCw class="size-3.5" />
+              <RefreshCw class="size-4" />
             </button>
           </Tooltip>
         </span>
@@ -84,13 +84,13 @@
         side={collapsed ? 'right' : 'bottom'}
       >
         <button
-          class="pressable grid size-6 place-items-center rounded-md text-fg-subtle hover:bg-hover hover:text-fg"
+          class="pressable grid size-7 place-items-center rounded-md text-fg-subtle hover:bg-hover hover:text-fg"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-expanded={!collapsed}
           onclick={() => app.toggleSidebar()}
         >
-          {#if collapsed}<PanelLeftOpen class="size-3.5" />{:else}<PanelLeftClose
-              class="size-3.5"
+          {#if collapsed}<PanelLeftOpen class="size-4" />{:else}<PanelLeftClose
+              class="size-4"
             />{/if}
         </button>
       </Tooltip>
@@ -212,13 +212,13 @@
 
     <Tooltip content="Settings" disabled={!collapsed}>
       <button
-        class="pressable flex h-8 w-full items-center gap-2 rounded-lg text-fg-muted hover:bg-hover hover:text-fg {collapsed
+        class="pressable flex h-9 w-full items-center gap-2.5 rounded-lg text-fg-muted hover:bg-hover hover:text-fg {collapsed
           ? 'justify-center'
           : 'px-2.5'}"
         aria-label="Settings"
         onclick={() => onSettings?.()}
       >
-        <Settings class="size-3.5 shrink-0" />
+        <Settings class="shrink-0 {collapsed ? 'size-[18px]' : 'size-4'}" />
         {#if !collapsed}<span in:fade={{ duration: 160, delay: 100 }}>Settings</span>{/if}
       </button>
     </Tooltip>

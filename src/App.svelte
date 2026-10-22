@@ -75,6 +75,8 @@
       shortcuts = !shortcuts;
     } else if (e.key === 'Escape' && (shortcuts || settings || rescan || app.cartOpen)) {
       shortcuts = settings = rescan = app.cartOpen = false;
+    } else if (e.key === 'Escape' && app.selected !== null && !app.menu) {
+      app.selected = null;
     } else if (e.key === 'Delete' && drive && app.selected !== null && app.selected !== 0) {
       e.preventDefault();
       app.toggleCart(drive.letter, app.selected);
