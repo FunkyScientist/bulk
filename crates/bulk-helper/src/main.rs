@@ -13,7 +13,7 @@ use std::os::windows::io::FromRawHandle;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -28,6 +28,7 @@ use bulk_core::{snapshot, usn};
 
 use windows_sys::Win32::Foundation::{
     CloseHandle, ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE, LocalFree,
+    WAIT_OBJECT_0,
 };
 use windows_sys::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -39,7 +40,8 @@ use windows_sys::Win32::System::Pipes::{
     PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
 };
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    QueryFullProcessImageNameW, WaitForSingleObject,
 };
 
 const IDLE_EXIT: Duration = Duration::from_secs(10 * 60);
@@ -309,12 +311,35 @@ struct Activity {
     active: AtomicUsize,
     last: AtomicU64,
     start: Instant,
+    /// Handles of the Bulk processes that have connected, by process id.
+    apps: Mutex<Vec<(u32, isize)>>,
 }
 
 impl Activity {
     fn touch(&self) {
         self.last
             .store(self.start.elapsed().as_secs(), Ordering::Relaxed);
+    }
+
+    fn watch(&self, pid: u32) {
+        let mut apps = self.apps.lock().unwrap();
+        if apps.iter().any(|&(p, _)| p == pid) {
+            return;
+        }
+        let h = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
+        if !h.is_null() {
+            apps.push((pid, h as isize));
+        }
+    }
+
+    /// True once every app that used this helper has exited, however it ended
+    /// (closed, killed, or stopped with Ctrl+C under `tauri dev`).
+    fn apps_gone(&self) -> bool {
+        let apps = self.apps.lock().unwrap();
+        !apps.is_empty()
+            && apps
+                .iter()
+                .all(|&(_, h)| unsafe { WaitForSingleObject(h as _, 0) } == WAIT_OBJECT_0)
     }
 }
 
@@ -352,14 +377,17 @@ fn serve(user: Option<String>) -> anyhow::Result<()> {
         active: AtomicUsize::new(0),
         last: AtomicU64::new(0),
         start: Instant::now(),
+        apps: Mutex::new(Vec::new()),
     });
     {
         let a = activity.clone();
         std::thread::spawn(move || {
             loop {
-                std::thread::sleep(Duration::from_secs(5));
+                std::thread::sleep(Duration::from_secs(1));
                 let idle = a.start.elapsed().as_secs() - a.last.load(Ordering::Relaxed);
-                if a.active.load(Ordering::Relaxed) == 0 && idle >= IDLE_EXIT.as_secs() {
+                if a.active.load(Ordering::Relaxed) == 0
+                    && (idle >= IDLE_EXIT.as_secs() || a.apps_gone())
+                {
                     std::process::exit(0);
                 }
             }
@@ -410,7 +438,7 @@ fn serve(user: Option<String>) -> anyhow::Result<()> {
         let raw = h as isize;
         let sid = sid.clone();
         std::thread::spawn(move || {
-            if let Err(e) = handle(conn, raw, &sid) {
+            if let Err(e) = handle(conn, raw, &sid, &a) {
                 log(&format!("connection: {e:#}"));
             }
             a.touch();
@@ -419,36 +447,35 @@ fn serve(user: Option<String>) -> anyhow::Result<()> {
     }
 }
 
-/// Only Bulk executables installed alongside this helper may use it.
-fn client_allowed(pipe: isize) -> bool {
+/// Only Bulk executables installed alongside this helper may use it. Returns the
+/// client's process id when it's allowed.
+fn client_allowed(pipe: isize) -> Option<u32> {
     let mut pid = 0u32;
     if unsafe { GetNamedPipeClientProcessId(pipe as _, &mut pid) } == 0 {
-        return false;
+        return None;
     }
     let proc = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
     if proc.is_null() {
-        return false;
+        return None;
     }
     let mut buf = [0u16; 1024];
     let mut len = buf.len() as u32;
     let ok = unsafe { QueryFullProcessImageNameW(proc, 0, buf.as_mut_ptr(), &mut len) } != 0;
     unsafe { CloseHandle(proc) };
     if !ok {
-        return false;
+        return None;
     }
     let client = PathBuf::from(String::from_utf16_lossy(&buf[..len as usize]));
-    let Ok(me) = std::env::current_exe() else {
-        return false;
-    };
+    let me = std::env::current_exe().ok()?;
     let same_dir = match (client.parent(), me.parent()) {
         (Some(a), Some(b)) => a.as_os_str().eq_ignore_ascii_case(b.as_os_str()),
         _ => false,
     };
-    same_dir && client != me
+    (same_dir && client != me).then_some(pid)
 }
 
-fn handle(mut conn: File, raw: isize, sid: &str) -> anyhow::Result<()> {
-    if !client_allowed(raw) {
+fn handle(mut conn: File, raw: isize, sid: &str, activity: &Activity) -> anyhow::Result<()> {
+    let Some(pid) = client_allowed(raw) else {
         write_json(
             &mut conn,
             &Event::Error {
@@ -456,7 +483,8 @@ fn handle(mut conn: File, raw: isize, sid: &str) -> anyhow::Result<()> {
             },
         )?;
         return Ok(());
-    }
+    };
+    activity.watch(pid);
     let (_, body) = read_frame(&mut conn)?;
     let req: Request = serde_json::from_slice(&body)?;
     if !matches!(req, Request::Hello) {
