@@ -343,6 +343,7 @@ dependencies = [
  "anyhow",
  "rayon",
  "serde",
+ "serde_json",
  "windows-sys 0.61.2",
 ]
 
@@ -352,6 +353,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bulk-core",
+ "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
