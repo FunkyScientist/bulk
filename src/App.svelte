@@ -7,6 +7,7 @@
   import Sidebar from '$lib/components/Sidebar.svelte';
   import ScanProgress from '$lib/components/ScanProgress.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
+  import Explorer from '$lib/components/Explorer.svelte';
 
   $effect(() => {
     document.documentElement.dataset.theme = app.resolvedTheme;
@@ -40,9 +41,7 @@
             {:else if !drive.scanned}
               <EmptyState {drive} />
             {:else}
-              <div class="grid h-full place-items-center text-fg-muted">
-                {drive.letter}: scanned
-              </div>
+              <Explorer {drive} />
             {/if}
           {/key}
         {/if}

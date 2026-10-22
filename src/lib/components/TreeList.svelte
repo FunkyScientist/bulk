@@ -1,0 +1,287 @@
+<script lang="ts">
+  import { untrack } from 'svelte';
+  import ChevronRight from '@lucide/svelte/icons/chevron-right';
+  import Folder from '@lucide/svelte/icons/folder';
+  import FolderOpen from '@lucide/svelte/icons/folder-open';
+  import File from '@lucide/svelte/icons/file';
+  import Link from '@lucide/svelte/icons/link-2';
+  import ArrowDown from '@lucide/svelte/icons/arrow-down';
+  import { api, Flags, type Row, type SortKey } from '$lib/api';
+  import { app } from '$lib/app.svelte';
+  import { ago, bytes, count, percent } from '$lib/format';
+
+  let { letter }: { letter: string } = $props();
+
+  const ROW = 28;
+  const PAGE = 100;
+
+  let viewport: HTMLDivElement;
+  let scrollTop = $state(0);
+  let height = $state(600);
+  let total = $state(0);
+  let pages = $state<Record<number, Row[]>>({});
+  const loading = new Set<number>();
+  let generation = 0;
+
+  /** Rows that just appeared under an expanded folder animate in. */
+  let entering = $state<{ from: number; to: number; at: number } | null>(null);
+
+  const first = $derived(Math.max(0, Math.floor(scrollTop / ROW) - 8));
+  const last = $derived(Math.min(total, Math.ceil((scrollTop + height) / ROW) + 8));
+
+  /** Reload the visible pages and swap them in together, so nothing flashes. */
+  async function refetch() {
+    const gen = ++generation;
+    loading.clear();
+    const a = Math.floor(first / PAGE);
+    const b = Math.max(a, Math.floor(Math.max(first, last - 1) / PAGE));
+    const res = await Promise.all(
+      Array.from({ length: b - a + 1 }, (_, k) => api.rows(letter, (a + k) * PAGE, PAGE)),
+    );
+    if (gen !== generation) return;
+    const next: Record<number, Row[]> = {};
+    res.forEach((r, k) => (next[a + k] = r.rows));
+    total = res[0].total;
+    pages = next;
+  }
+
+  async function load(page: number) {
+    if (loading.has(page)) return;
+    loading.add(page);
+    const gen = generation;
+    try {
+      const res = await api.rows(letter, page * PAGE, PAGE);
+      if (gen !== generation) return;
+      total = res.total;
+      pages[page] = res.rows;
+    } finally {
+      loading.delete(page);
+    }
+  }
+
+  // Refetch whenever the backend view changes.
+  $effect(() => {
+    void app.rowsVersion;
+    void letter;
+    untrack(refetch);
+  });
+
+  // Fetch any pages the visible window needs.
+  $effect(() => {
+    const a = Math.floor(first / PAGE);
+    const b = Math.floor(Math.max(first, last - 1) / PAGE);
+    untrack(() => {
+      for (let p = a; p <= b; p++) if (!pages[p]) void load(p);
+    });
+  });
+
+  function rowAt(i: number): Row | undefined {
+    return pages[Math.floor(i / PAGE)]?.[i % PAGE];
+  }
+
+  const visible = $derived.by(() => {
+    const out: { i: number; row: Row | undefined }[] = [];
+    for (let i = first; i < last; i++) out.push({ i, row: rowAt(i) });
+    return out;
+  });
+
+  async function toggle(row: Row, index: number) {
+    if (!row.hasKids) return;
+    const before = total;
+    const n = await api.toggle(letter, row.id);
+    if (!row.open && n > before)
+      entering = { from: index + 1, to: index + 1 + (n - before), at: Date.now() };
+    await refetch();
+  }
+
+  function select(row: Row) {
+    app.selected = row.id;
+  }
+
+  async function open(row: Row, index: number) {
+    if (row.dir) return toggle(row, index);
+    await api.showInExplorer(await api.nodePath(letter, row.id));
+  }
+
+  function enterDelay(i: number) {
+    if (!entering || i < entering.from || i >= entering.to) return null;
+    if (Date.now() - entering.at > 600) return null;
+    return Math.min(i - entering.from, 14) * 14;
+  }
+
+  const columns: { key: SortKey; label: string; width: string; align?: 'right' }[] = [
+    { key: 'alloc', label: 'Size on disk', width: '108px', align: 'right' },
+    { key: 'size', label: 'Size', width: '96px', align: 'right' },
+    { key: 'files', label: 'Files', width: '88px', align: 'right' },
+    { key: 'modified', label: 'Modified', width: '110px', align: 'right' },
+  ];
+
+  function iconColor(row: Row) {
+    if (row.flags & (Flags.EXTRA_LINK | Flags.REPARSE)) return 'text-fg-subtle';
+    return row.dir ? 'text-accent' : 'text-fg-subtle';
+  }
+</script>
+
+<div class="flex h-full min-w-0 flex-col">
+  <div
+    class="header flex h-8 shrink-0 items-center border-b border-line pr-3 text-[11.5px] text-fg-subtle"
+  >
+    <button
+      class="hcell flex flex-1 items-center gap-1 pl-4 text-left"
+      class:active={app.sort === 'name'}
+      onclick={() => app.setSort('name')}
+    >
+      Name {#if app.sort === 'name'}<ArrowDown class="size-3 rotate-180" />{/if}
+    </button>
+    <div class="w-[120px] pl-2">Share</div>
+    {#each columns as c (c.key)}
+      <button
+        class="hcell flex items-center justify-end gap-1"
+        style="width: {c.width}"
+        class:active={app.sort === c.key}
+        onclick={() => app.setSort(c.key)}
+      >
+        {#if app.sort === c.key}<ArrowDown class="size-3" />{/if}
+        {c.label}
+      </button>
+    {/each}
+  </div>
+
+  <div
+    class="min-h-0 flex-1 overflow-y-auto"
+    bind:this={viewport}
+    bind:clientHeight={height}
+    onscroll={() => (scrollTop = viewport.scrollTop)}
+    role="tree"
+    tabindex="-1"
+  >
+    <div class="relative" style="height: {total * ROW}px">
+      {#each visible as { i, row } (row ? `${row.id}` : `p${i}`)}
+        {@const delay = enterDelay(i)}
+        <div
+          class="row absolute inset-x-0 flex items-center pr-3"
+          class:selected={row && app.selected === row.id}
+          class:enter={delay !== null}
+          style="transform: translateY({i * ROW}px); height: {ROW}px; {delay !== null
+            ? `animation-delay: ${delay}ms`
+            : ''}"
+          role="treeitem"
+          aria-selected={row ? app.selected === row.id : false}
+          aria-expanded={row?.dir ? row.open : undefined}
+          tabindex="-1"
+          onclick={() => row && select(row)}
+          ondblclick={() => row && open(row, i)}
+          onkeydown={() => {}}
+        >
+          {#if row}
+            <div
+              class="flex min-w-0 flex-1 items-center gap-1.5"
+              style="padding-left: {8 + row.depth * 16}px"
+            >
+              <button
+                class="chev grid size-5 shrink-0 place-items-center rounded text-fg-subtle hover:bg-hover hover:text-fg"
+                class:invisible={!row.hasKids}
+                class:open={row.open}
+                tabindex="-1"
+                aria-label={row.open ? 'Collapse' : 'Expand'}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  toggle(row, i);
+                }}
+              >
+                <ChevronRight class="size-3.5" />
+              </button>
+              <span class="shrink-0 {iconColor(row)}">
+                {#if row.flags & (Flags.EXTRA_LINK | Flags.REPARSE)}<Link
+                    class="size-3.5"
+                  />{:else if row.dir}{#if row.open}<FolderOpen class="size-3.5" />{:else}<Folder
+                      class="size-3.5"
+                    />{/if}{:else}<File class="size-3.5" />{/if}
+              </span>
+              <span class="truncate" class:text-fg-muted={row.flags & (Flags.HIDDEN | Flags.META)}>
+                {row.depth === 0 ? `${row.name}\\` : row.name}
+              </span>
+            </div>
+            <div class="flex w-[120px] items-center gap-2 pl-2">
+              <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-panel-2">
+                <div class="bar h-full rounded-full" style="width: {row.share * 100}%"></div>
+              </div>
+              <span class="tabular w-9 text-right text-[11px] text-fg-subtle"
+                >{percent(row.share)}</span
+              >
+            </div>
+            <div class="tabular w-[108px] text-right">{bytes(row.alloc)}</div>
+            <div class="tabular w-[96px] text-right text-fg-muted">{bytes(row.size)}</div>
+            <div class="tabular w-[88px] text-right text-fg-muted">
+              {row.dir ? count(row.files) : ''}
+            </div>
+            <div class="w-[110px] truncate text-right text-fg-subtle">{ago(row.mtime)}</div>
+          {:else}
+            <div
+              class="skeleton ml-4 h-2.5 rounded"
+              style="width: {140 + ((i * 37) % 160)}px"
+            ></div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  </div>
+</div>
+
+<style>
+  .hcell {
+    height: 100%;
+    transition: color 120ms ease;
+  }
+  .hcell:hover,
+  .hcell.active {
+    color: var(--fg);
+  }
+  .row {
+    top: 0;
+    border-radius: 8px;
+    margin: 0 6px;
+    /* Rows glide to their new place when folders open or the sort changes. */
+    transition:
+      transform 220ms var(--ease-out-soft),
+      background-color 120ms ease;
+  }
+  .row:hover {
+    background: var(--hover);
+  }
+  .row.selected {
+    background: var(--accent-soft);
+  }
+  .row.enter {
+    animation: row-in 260ms var(--ease-out-soft) both;
+  }
+  @keyframes row-in {
+    from {
+      opacity: 0;
+    }
+  }
+  .chev :global(svg) {
+    transition: transform 180ms var(--ease-out-soft);
+  }
+  .chev.open :global(svg) {
+    transform: rotate(90deg);
+  }
+  .bar {
+    background: linear-gradient(
+      90deg,
+      var(--accent),
+      color-mix(in oklab, var(--accent) 70%, white)
+    );
+    transition: width 400ms var(--ease-out-soft);
+  }
+  .skeleton {
+    background: linear-gradient(90deg, var(--panel-2), var(--hover), var(--panel-2));
+    background-size: 200% 100%;
+    animation: shimmer 1.2s linear infinite;
+  }
+  @keyframes shimmer {
+    to {
+      background-position: -200% 0;
+    }
+  }
+</style>
