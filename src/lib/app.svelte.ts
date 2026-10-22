@@ -37,6 +37,8 @@ export interface ScanState {
 
 const emptyProgress: Progress = { files: 0, dirs: 0, bytes: 0, done: 0, total: 0 };
 
+export type Layout = 'columns' | 'rows';
+
 function readPref<T extends string>(key: string, fallback: T): T {
   try {
     return (localStorage.getItem(key) as T) ?? fallback;
@@ -69,6 +71,8 @@ class AppState {
   /** Asks the tree list to expand to and scroll to a node. */
   revealRequest = $state<{ id: number; seq: number } | null>(null);
   visual = $state<'treemap' | 'sunburst'>(readPref('bulk.visual', 'treemap'));
+  /** Files beside the chart (columns) or above it (rows). */
+  layout = $state<Layout>(readPref<Layout>('bulk.layout', 'columns'));
   split = $state(Number(readPref('bulk.split', '0.5')) || 0.5);
   tab = $state<'browse' | 'changes' | 'duplicates'>('browse');
   cart = $state<CartItem[]>([]);
@@ -259,6 +263,11 @@ class AppState {
   setSplit(v: number) {
     this.split = Math.min(0.75, Math.max(0.25, v));
     writePref('bulk.split', String(this.split));
+  }
+
+  setLayout(l: Layout) {
+    this.layout = l;
+    writePref('bulk.layout', l);
   }
 
   setTheme(t: ThemePref) {

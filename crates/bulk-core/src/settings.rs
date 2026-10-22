@@ -40,7 +40,7 @@ impl Default for Settings {
         Settings {
             auto_snapshots: true,
             snapshot_every: Every::Daily,
-            history_keep: 30,
+            history_keep: 7,
             explorer_menu: true,
         }
     }

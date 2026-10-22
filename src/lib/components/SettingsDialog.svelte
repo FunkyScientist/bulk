@@ -5,7 +5,9 @@
   import Zap from '@lucide/svelte/icons/zap';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import { api, type Settings } from '$lib/api';
-  import { app, type ThemePref } from '$lib/app.svelte';
+  import { app, type Layout, type ThemePref } from '$lib/app.svelte';
+  import Columns2 from '@lucide/svelte/icons/columns-2';
+  import Rows2 from '@lucide/svelte/icons/rows-2';
   import { bytes, count } from '$lib/format';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
@@ -47,6 +49,10 @@
     { k: 'system', l: 'System' },
     { k: 'dark', l: 'Dark' },
     { k: 'light', l: 'Light' },
+  ];
+  const layouts: { k: Layout; l: string; I: typeof Columns2 }[] = [
+    { k: 'columns', l: 'Side by side', I: Columns2 },
+    { k: 'rows', l: 'Stacked', I: Rows2 },
   ];
   const keeps = [7, 14, 30, 60, 90];
 </script>
@@ -110,6 +116,24 @@
         <div class="row">
           <div>Theme</div>
           {@render segmented(themes, app.theme, (v) => app.setTheme(v))}
+        </div>
+        <div class="row">
+          <div>
+            <div>Layout</div>
+            <div class="sub">Put the chart beside the file list, or below it.</div>
+          </div>
+          <div class="flex rounded-lg bg-panel-2 p-0.5 text-[12px]">
+            {#each layouts as o (o.k)}
+              <button
+                class="flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors {app.layout ===
+                o.k
+                  ? 'bg-panel text-fg shadow-sm'
+                  : 'text-fg-subtle hover:text-fg-muted'}"
+                aria-pressed={app.layout === o.k}
+                onclick={() => app.setLayout(o.k)}><o.I class="size-3.5" />{o.l}</button
+              >
+            {/each}
+          </div>
         </div>
       </section>
 

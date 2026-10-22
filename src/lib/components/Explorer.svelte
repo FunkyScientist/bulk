@@ -29,6 +29,7 @@
   ] as const;
 
   let body: HTMLDivElement | undefined = $state();
+  const rows = $derived(app.layout === 'rows');
   let dragging = $state(false);
   function startDrag(e: PointerEvent) {
     dragging = true;
@@ -37,7 +38,9 @@
     const move = (ev: PointerEvent) => {
       if (!body) return;
       const r = body.getBoundingClientRect();
-      app.setSplit((ev.clientX - r.left) / r.width);
+      app.setSplit(
+        rows ? (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width,
+      );
     };
     const up = () => {
       dragging = false;
@@ -141,19 +144,27 @@
       <DiffView letter={drive.letter} method={drive.method} />
     </div>
   {:else}
-    <div class="flex min-h-0 flex-1" bind:this={body} in:fade={{ duration: 160 }}>
-      <div class="min-w-0" style="width: {app.split * 100}%">
+    <div
+      class="flex min-h-0 flex-1 {rows ? 'flex-col' : ''}"
+      bind:this={body}
+      in:fade={{ duration: 160 }}
+    >
+      <div
+        class="min-h-0 min-w-0"
+        style="{rows ? 'height' : 'width'}: {app.split * 100}%"
+      >
         <TreeList letter={drive.letter} />
       </div>
       <div
         class="splitter"
         class:dragging
+        class:rows
         role="separator"
-        aria-orientation="vertical"
+        aria-orientation={rows ? 'horizontal' : 'vertical'}
         tabindex="-1"
         onpointerdown={startDrag}
       ></div>
-      <div class="min-w-0 flex-1">
+      <div class="min-h-0 min-w-0 flex-1">
         <VisualPane letter={drive.letter} />
       </div>
     </div>
@@ -219,6 +230,22 @@
     background: var(--line-strong);
     opacity: 0;
     transition: opacity 160ms ease;
+  }
+  .splitter.rows {
+    width: auto;
+    height: 1px;
+    cursor: row-resize;
+  }
+  .splitter.rows::after {
+    inset: -4px 0;
+  }
+  .splitter.rows::before {
+    top: -1.5px;
+    left: 50%;
+    width: 32px;
+    height: 4px;
+    margin-top: 0;
+    margin-left: -16px;
   }
   .splitter:hover::before,
   .splitter.dragging::before {
