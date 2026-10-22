@@ -177,7 +177,25 @@ export interface DiffItem {
   hasKids: boolean;
 }
 
+export interface SearchHit {
+  letter: string;
+  id: number;
+  name: string;
+  path: string;
+  dir: boolean;
+  alloc: number;
+  mtime: number;
+}
+
+export interface SearchResult {
+  total: number;
+  elapsedMs: number;
+  hits: SearchHit[];
+}
+
 export const api = {
+  search: (query: string, letter?: string) =>
+    invoke<SearchResult>('search', { query, letter: letter ?? null }),
   history: (letter: string) => invoke<HistoryEntry[]>('history', { letter }),
   diffOpen: (letter: string, path: string) => invoke<DiffSummary>('diff_open', { letter, path }),
   diffChildren: (letter: string, oldId: number | null, newId: number | null) =>

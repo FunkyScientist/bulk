@@ -27,9 +27,15 @@
     view?.zoomOut(i === 0 ? null : c.id);
   }
 
-  export function zoomOut() {
-    view?.zoomOut();
-  }
+  // Backspace anywhere goes up a level.
+  let lastSeq = app.zoomOutSeq;
+  $effect(() => {
+    const s = app.zoomOutSeq;
+    if (s !== lastSeq) {
+      lastSeq = s;
+      view?.zoomOut();
+    }
+  });
 
   const modes = [
     { key: 'treemap', label: 'Treemap', icon: LayoutGrid },

@@ -54,7 +54,8 @@
   async function load() {
     const seq = ++loadSeq;
     const t = await api.treemap(letter, focus, width, height);
-    if (seq !== loadSeq) return;
+    // Stale, or the component went away while the layout was loading.
+    if (seq !== loadSeq || !base) return;
     tiles = t;
     total = 0;
     for (let i = 0; i < t.count; i++) if (t.depth[i] === 1) total += t.value[i];

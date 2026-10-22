@@ -387,6 +387,72 @@ fn encode_shapes(tree: &Tree, shapes: impl Iterator<Item = Shape>, use_alloc: bo
     out
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchHit {
+    letter: char,
+    id: NodeId,
+    name: String,
+    path: String,
+    dir: bool,
+    alloc: u64,
+    mtime: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult {
+    total: usize,
+    elapsed_ms: f64,
+    hits: Vec<SearchHit>,
+}
+
+/// Search every scanned drive (or just `letter`). See `bulk_core::search` for the
+/// query syntax.
+#[tauri::command]
+pub async fn search(
+    state: State<'_, AppState>,
+    query: String,
+    letter: Option<char>,
+) -> Res<SearchResult> {
+    let t0 = std::time::Instant::now();
+    let q = bulk_core::search::parse(&query, scan::now());
+    let drives = state.drives.lock().unwrap();
+    let mut all: Vec<(u8, u64, SearchHit)> = Vec::new();
+    let mut total = 0;
+    for (l, d) in drives.iter() {
+        if letter.is_some_and(|x| x != *l) {
+            continue;
+        }
+        let Some(tree) = &d.tree else { continue };
+        let (hits, n) = bulk_core::search::search(tree, &q, 120);
+        total += n;
+        for h in hits {
+            let node = tree.get(h.id);
+            all.push((
+                h.score,
+                node.alloc,
+                SearchHit {
+                    letter: *l,
+                    id: h.id,
+                    name: tree.name(h.id).to_string(),
+                    path: tree.path(h.id),
+                    dir: node.is_dir(),
+                    alloc: node.alloc,
+                    mtime: node.mtime,
+                },
+            ));
+        }
+    }
+    all.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+    all.truncate(120);
+    Ok(SearchResult {
+        total,
+        elapsed_ms: t0.elapsed().as_secs_f64() * 1000.0,
+        hits: all.into_iter().map(|(_, _, h)| h).collect(),
+    })
+}
+
 #[tauri::command]
 pub fn show_in_explorer(path: String) -> Res<()> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;

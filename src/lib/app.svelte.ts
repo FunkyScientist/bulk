@@ -123,6 +123,21 @@ class AppState {
     if (reveal) this.revealRequest = { id, seq: (this.revealRequest?.seq ?? 0) + 1 };
   }
 
+  /** Jump to a node: switch drive and tab, reveal it in the list and show its folder. */
+  async goTo(letter: string, id: number) {
+    if (this.current !== letter) this.select(letter);
+    this.tab = 'browse';
+    const info = await api.nodeInfo(letter, id);
+    this.setFocus(letter, info.parent === null || info.parent === 0 ? null : info.parent);
+    this.selectNode(id, true);
+  }
+
+  /** Bumped to ask the visualisation to go up one level. */
+  zoomOutSeq = $state(0);
+  zoomOut() {
+    this.zoomOutSeq++;
+  }
+
   setFocus(letter: string, id: number | null) {
     this.focus[letter] = id;
   }

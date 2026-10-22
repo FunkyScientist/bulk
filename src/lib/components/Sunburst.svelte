@@ -54,7 +54,8 @@
       api.sunburst(letter, focus, RINGS),
       api.nodeInfo(letter, focus ?? 0),
     ]);
-    if (seq !== loadSeq) return;
+    // Stale, or the component went away while the layout was loading.
+    if (seq !== loadSeq || !canvas) return;
     arcs = t;
     branch = branches(t);
     center = info;

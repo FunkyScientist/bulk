@@ -327,6 +327,9 @@ fn handle(mut conn: File, raw: isize) -> anyhow::Result<()> {
     }
     let (_, body) = read_frame(&mut conn)?;
     let req: Request = serde_json::from_slice(&body)?;
+    if !matches!(req, Request::Hello) {
+        log(&format!("request: {req:?}"));
+    }
     match req {
         Request::Hello => write_json(
             &mut conn,

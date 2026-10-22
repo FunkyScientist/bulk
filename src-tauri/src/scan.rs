@@ -66,7 +66,14 @@ pub fn refresh_drives(app: &AppHandle) {
 
 pub fn check_helper(app: AppHandle) {
     std::thread::spawn(move || {
-        let status = probe_helper();
+        let mut status = probe_helper();
+        // A helper that's busy finishing old connections (e.g. right after the app
+        // restarted) can miss the first check; give it one more chance.
+        if status != HelperStatus::Ready && helper::task_installed() {
+            std::thread::sleep(Duration::from_secs(3));
+            status = probe_helper();
+        }
+        eprintln!("helper status: {status:?}");
         set_helper_status(&app, status);
     });
 }
@@ -109,7 +116,13 @@ fn probe_helper() -> HelperStatus {
         {
             HelperStatus::Ready
         }
-        _ => HelperStatus::Outdated,
+        other => {
+            eprintln!(
+                "helper mismatch: {other:?} (expected {:?})",
+                helper::helper_exe()
+            );
+            HelperStatus::Outdated
+        }
     }
 }
 

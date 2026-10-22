@@ -96,6 +96,88 @@
 
   function select(row: Row) {
     app.selectNode(row.id);
+    viewport.focus({ preventScroll: true });
+  }
+
+  /** Row at `i`, loading its page if needed. */
+  async function fetchRow(i: number): Promise<Row | undefined> {
+    if (i < 0 || i >= total) return undefined;
+    const p = Math.floor(i / PAGE);
+    if (!pages[p]) await load(p);
+    return rowAt(i);
+  }
+
+  function ensureVisible(i: number) {
+    const top = i * ROW;
+    if (top < viewport.scrollTop) viewport.scrollTo({ top });
+    else if (top + ROW > viewport.scrollTop + height)
+      viewport.scrollTo({ top: top + ROW - height });
+  }
+
+  async function selectIndex(i: number) {
+    const idx = Math.max(0, Math.min(total - 1, i));
+    const row = await fetchRow(idx);
+    if (!row) return;
+    app.selectNode(row.id);
+    ensureVisible(idx);
+  }
+
+  function selectedIndex() {
+    for (const [p, rows] of Object.entries(pages)) {
+      const k = rows.findIndex((r) => r.id === app.selected);
+      if (k >= 0) return Number(p) * PAGE + k;
+    }
+    return -1;
+  }
+
+  async function onKey(e: KeyboardEvent) {
+    const page = Math.max(1, Math.floor(height / ROW) - 1);
+    const cur = selectedIndex();
+    const row = cur >= 0 ? rowAt(cur) : undefined;
+    const handled = [
+      'ArrowDown',
+      'ArrowUp',
+      'ArrowLeft',
+      'ArrowRight',
+      'Home',
+      'End',
+      'PageDown',
+      'PageUp',
+      'Enter',
+    ];
+    if (!handled.includes(e.key)) return;
+    e.preventDefault();
+    if (cur < 0 || !row) return selectIndex(0);
+    switch (e.key) {
+      case 'ArrowDown':
+        return selectIndex(cur + 1);
+      case 'ArrowUp':
+        return selectIndex(cur - 1);
+      case 'PageDown':
+        return selectIndex(cur + page);
+      case 'PageUp':
+        return selectIndex(cur - page);
+      case 'Home':
+        return selectIndex(0);
+      case 'End':
+        return selectIndex(total - 1);
+      case 'ArrowRight':
+        if (row.hasKids && !row.open) return toggle(row, cur);
+        if (row.open) return selectIndex(cur + 1);
+        return;
+      case 'ArrowLeft':
+        if (row.open && row.depth > 0) return toggle(row, cur);
+        // Walk back to the parent row (the nearest row above with smaller depth).
+        for (let i = cur - 1; i >= 0; i--) {
+          const r = await fetchRow(i);
+          if (r && r.depth < row.depth) return selectIndex(i);
+        }
+        return;
+      case 'Enter':
+        if (e.shiftKey) return api.showInExplorer(await api.nodePath(letter, row.id));
+        if (row.dir) app.setFocus(letter, row.depth === 0 ? null : row.id);
+        return;
+    }
   }
 
   async function open(row: Row, index: number) {
@@ -146,6 +228,7 @@
       const top = index * ROW - height / 2 + ROW / 2;
       const visibleNow = index * ROW >= scrollTop && (index + 1) * ROW <= scrollTop + height;
       if (!visibleNow) viewport.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      viewport.focus({ preventScroll: true });
     });
   });
 
@@ -185,8 +268,9 @@
     bind:this={viewport}
     bind:clientHeight={height}
     onscroll={() => (scrollTop = viewport.scrollTop)}
+    onkeydown={onKey}
     role="tree"
-    tabindex="-1"
+    tabindex="0"
   >
     <div class="relative" style="height: {total * ROW}px">
       {#each visible as { i, row } (row ? `${row.id}` : `p${i}`)}
@@ -205,6 +289,7 @@
           onclick={() => row && select(row)}
           ondblclick={() => row && open(row, i)}
           onkeydown={() => {}}
+          onfocus={() => viewport.focus({ preventScroll: true })}
         >
           {#if row}
             <div
@@ -270,6 +355,10 @@
 </div>
 
 <style>
+  /* The selected row already shows where the keyboard is. */
+  [role='tree']:focus-visible {
+    outline: none;
+  }
   .hcell {
     height: 100%;
     transition: color 120ms ease;

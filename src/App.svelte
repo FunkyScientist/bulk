@@ -8,6 +8,11 @@
   import ScanProgress from '$lib/components/ScanProgress.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import Explorer from '$lib/components/Explorer.svelte';
+  import CommandPalette from '$lib/components/CommandPalette.svelte';
+  import Shortcuts from '$lib/components/Shortcuts.svelte';
+
+  let palette = $state(false);
+  let shortcuts = $state(false);
 
   $effect(() => {
     document.documentElement.dataset.theme = app.resolvedTheme;
@@ -24,10 +29,48 @@
     }
   });
 
+  function typing(e: KeyboardEvent) {
+    const t = e.target as HTMLElement | null;
+    return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  }
+
   function onKey(e: KeyboardEvent) {
-    if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+    const key = e.key.toLowerCase();
+    const ctrl = e.ctrlKey && !e.altKey;
+    if (ctrl && (key === 'k' || key === 'f')) {
+      e.preventDefault();
+      palette = !palette;
+      return;
+    }
+    if (palette || typing(e)) return;
+    if (ctrl && key === 'b') {
       e.preventDefault();
       app.toggleSidebar();
+    } else if ((ctrl && key === 'r') || e.key === 'F5') {
+      e.preventDefault();
+      if (drive) app.scan(drive.letter);
+    } else if (ctrl && key === '1') {
+      e.preventDefault();
+      app.setVisual('treemap');
+    } else if (ctrl && key === '2') {
+      e.preventDefault();
+      app.setVisual('sunburst');
+    } else if (e.key === '?') {
+      e.preventDefault();
+      shortcuts = !shortcuts;
+    } else if (e.key === 'Escape' && shortcuts) {
+      shortcuts = false;
+    } else if (e.key === 'Backspace' && drive) {
+      e.preventDefault();
+      app.zoomOut();
+    } else if (e.key.startsWith('Arrow') && document.activeElement === document.body) {
+      // Nothing focused: hand arrow keys to the file list.
+      const tree = document.querySelector<HTMLElement>('[role="tree"]');
+      if (tree) {
+        e.preventDefault();
+        tree.focus({ preventScroll: true });
+        tree.dispatchEvent(new KeyboardEvent('keydown', { key: e.key, bubbles: false }));
+      }
     }
   }
 
@@ -38,7 +81,7 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="flex h-full flex-col">
-  <TitleBar />
+  <TitleBar onSearch={() => (palette = true)} />
   <div class="flex min-h-0 flex-1">
     <Sidebar onRescan={() => drive && app.scan(drive.letter)} />
     <main class="min-w-0 flex-1 pr-2.5 pb-2.5">
@@ -58,6 +101,9 @@
     </main>
   </div>
 </div>
+
+<CommandPalette bind:open={palette} onShortcuts={() => (shortcuts = true)} />
+<Shortcuts bind:open={shortcuts} />
 
 <style>
   .surface {

@@ -86,12 +86,11 @@ impl Volume {
                 &mut ret,
                 &mut ov,
             );
-            let ok = r != 0 || GetOverlappedResult(handle, &ov, &mut ret, 1) != 0;
+            let res = complete(handle, &ov, r, &mut ret);
             CloseHandle(ov.hEvent);
-            ok
+            res
         };
-        if !ok {
-            let err = std::io::Error::last_os_error();
+        if let Err(err) = ok {
             unsafe { CloseHandle(handle) };
             anyhow::bail!("not an NTFS volume: {err}");
         }
@@ -119,12 +118,10 @@ impl Volume {
             ov.Anonymous.Anonymous.OffsetHigh = (offset >> 32) as u32;
             ov.hEvent = CreateEventW(std::ptr::null(), 1, 0, std::ptr::null());
             let mut got = 0u32;
-            let ok = ReadFile(self.handle, buf.ptr, len, std::ptr::null_mut(), &mut ov) != 0
-                || GetOverlappedResult(self.handle, &ov, &mut got, 1) != 0;
+            let r = ReadFile(self.handle, buf.ptr, len, std::ptr::null_mut(), &mut ov);
+            let res = complete(self.handle, &ov, r, &mut got);
             CloseHandle(ov.hEvent);
-            if !ok {
-                return Err(std::io::Error::last_os_error().into());
-            }
+            res?;
         }
         Ok(())
     }
@@ -163,6 +160,28 @@ impl Volume {
         }
         Ok(out)
     }
+}
+
+/// Finish an overlapped call whose immediate return value was `started`. Only waits
+/// when the operation is actually pending; waiting after an immediate failure would
+/// block forever, since the event is never signalled.
+unsafe fn complete(
+    handle: HANDLE,
+    ov: &OVERLAPPED,
+    started: i32,
+    transferred: &mut u32,
+) -> std::io::Result<()> {
+    const ERROR_IO_PENDING: i32 = 997;
+    if started == 0 {
+        let err = std::io::Error::last_os_error();
+        if err.raw_os_error() != Some(ERROR_IO_PENDING) {
+            return Err(err);
+        }
+    }
+    if unsafe { GetOverlappedResult(handle, ov, transferred, 1) } == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 /// Page-aligned heap buffer, required for unbuffered volume reads.
@@ -462,7 +481,7 @@ impl Volume {
         unsafe {
             let mut ov: OVERLAPPED = std::mem::zeroed();
             ov.hEvent = CreateEventW(std::ptr::null(), 1, 0, std::ptr::null());
-            let ok = DeviceIoControl(
+            let r = DeviceIoControl(
                 self.handle,
                 code,
                 input.as_ptr() as *const _,
@@ -471,13 +490,10 @@ impl Volume {
                 output.len() as u32,
                 &mut ret,
                 &mut ov,
-            ) != 0
-                || GetOverlappedResult(self.handle, &ov, &mut ret, 1) != 0;
-            let err = std::io::Error::last_os_error();
+            );
+            let res = complete(self.handle, &ov, r, &mut ret);
             CloseHandle(ov.hEvent);
-            if !ok {
-                return Err(err);
-            }
+            res?;
         }
         Ok(ret)
     }
