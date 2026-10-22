@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { api, TileFlags, type Tiles } from '$lib/api';
+  import { api, sameTiles, TileFlags, type Tiles } from '$lib/api';
   import { app } from '$lib/app.svelte';
   import { nodeMenu } from '$lib/menus';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
@@ -55,15 +55,23 @@
     });
   });
 
+  // What the canvas last showed, so live updates elsewhere on the drive don't redraw it.
+  let drawnTheme = '';
+  let inside = false;
+
   async function load() {
     const seq = ++loadSeq;
     const t = await api.treemap(letter, focus, width, height);
     // Stale, or the component went away while the layout was loading.
     if (seq !== loadSeq || !base) return;
+    const zooming = pending !== null || pendingOutFrom !== null;
+    if (!zooming && tiles && drawnTheme === app.resolvedTheme && sameTiles(tiles, t)) return;
+    drawnTheme = app.resolvedTheme;
     tiles = t;
     total = 0;
     for (let i = 0; i < t.count; i++) if (t.depth[i] === 1) total += t.value[i];
-    hover = -1;
+    // Keep the tooltip on whatever is under the pointer now.
+    hover = inside && !zooming ? hit(mouse.x, mouse.y) : -1;
 
     const anim = pending ?? outAnim(t);
     pending = null;
@@ -513,8 +521,14 @@
   <canvas
     bind:this={overlay}
     class="absolute inset-0 h-full w-full"
-    onpointermove={onMove}
-    onpointerleave={() => (hover = -1)}
+    onpointermove={(e) => {
+      inside = true;
+      onMove(e);
+    }}
+    onpointerleave={() => {
+      inside = false;
+      hover = -1;
+    }}
     onclick={onClick}
     ondblclick={onDblClick}
     oncontextmenu={(e) => {

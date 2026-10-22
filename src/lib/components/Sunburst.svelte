@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { api, TileFlags, type NodeInfo, type Tiles } from '$lib/api';
+  import { api, sameTiles, TileFlags, type NodeInfo, type Tiles } from '$lib/api';
   import { app } from '$lib/app.svelte';
   import { nodeMenu } from '$lib/menus';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
@@ -23,6 +23,9 @@
   let hoverCenter = $state(false);
   let mouse = $state({ x: 0, y: 0 });
   let center = $state<NodeInfo | null>(null);
+  // What the canvas last showed, so live updates elsewhere on the drive don't redraw it.
+  let drawnTheme = '';
+  let inside = false;
   let ready = $state(false);
   let animating = $state(false);
   let loadSeq = 0;
@@ -60,11 +63,30 @@
     ]);
     // Stale, or the component went away while the layout was loading.
     if (seq !== loadSeq || !canvas) return;
+    // Live updates elsewhere on the drive: nothing here changed, so leave it be.
+    const zooming = pendingIn !== null || pendingOutFrom !== null;
+    if (
+      !zooming &&
+      arcs &&
+      center &&
+      drawnTheme === app.resolvedTheme &&
+      sameTiles(arcs, t) &&
+      center.alloc === info.alloc &&
+      center.size === info.size
+    )
+      return;
+    drawnTheme = app.resolvedTheme;
     arcs = t;
     branch = branches(t);
     center = info;
     total = info.dir ? (app.sort === 'size' ? info.size : info.alloc) : 0;
-    hover = -1;
+    // Keep the tooltip on whatever is under the pointer now.
+    if (zooming || !inside) hover = -1;
+    else {
+      const h = hit(mouse.x, mouse.y);
+      hover = h.i;
+      hoverCenter = h.center;
+    }
 
     let zoom: Zoom | null = pendingIn;
     if (!zoom && pendingOutFrom !== null) {
@@ -411,8 +433,12 @@
     class="absolute inset-0 h-full w-full"
     class:show={ready}
     class:pointer={hover >= 0 || (hoverCenter && focus !== null)}
-    onpointermove={onMove}
+    onpointermove={(e) => {
+      inside = true;
+      onMove(e);
+    }}
     onpointerleave={() => {
+      inside = false;
       hover = -1;
       hoverCenter = false;
     }}

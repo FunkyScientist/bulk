@@ -115,6 +115,15 @@ export interface Tiles {
   cat: Uint8Array;
   value: Float64Array;
   labels: Map<number, string>;
+  /** The response as received, to tell whether a reload changed anything. */
+  raw: Uint8Array;
+}
+
+/** Whether two layouts are byte-for-byte the same (nothing visible changed). */
+export function sameTiles(a: Tiles, b: Tiles): boolean {
+  if (a.raw.length !== b.raw.length) return false;
+  for (let i = 0; i < a.raw.length; i++) if (a.raw[i] !== b.raw[i]) return false;
+  return true;
 }
 
 function decodeTiles(buf: ArrayBuffer): Tiles {
@@ -132,6 +141,7 @@ function decodeTiles(buf: ArrayBuffer): Tiles {
     cat: new Uint8Array(count),
     value: new Float64Array(count),
     labels: new Map(),
+    raw: new Uint8Array(buf),
   };
   let o = 4;
   for (let i = 0; i < count; i++, o += 32) {

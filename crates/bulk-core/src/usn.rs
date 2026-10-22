@@ -187,8 +187,13 @@ pub fn apply(tree: &mut Tree, index: &mut FrnIndex, changes: &[Change]) -> usize
                     && tree.get(id).frn == *frn
                     && id != tree.root
                 {
-                    // Keep it on screen, greyed out, until the next scan.
-                    tree.mark_gone(id);
+                    // Keep it on screen, greyed out, until the next scan; something
+                    // that came and went since then (temp files) just goes.
+                    if tree.get(id).has(flags::NEW) {
+                        tree.remove(id);
+                    } else {
+                        tree.mark_gone(id);
+                    }
                     index.0.remove(&(frn & RECORD_MASK));
                     touched += 1;
                 }
@@ -245,7 +250,10 @@ fn apply_one(
             if n.parent != parent && !tree.is_ancestor(id, parent) {
                 // Deleting in Explorer is a move into the Recycle Bin; show it as
                 // deleted where it was.
-                if in_recycle_bin(tree, parent) && !in_recycle_bin(tree, id) {
+                if in_recycle_bin(tree, parent)
+                    && !in_recycle_bin(tree, id)
+                    && !n.has(flags::NEW)
+                {
                     tree.leave_ghost(id);
                 }
                 tree.move_to(id, parent);
