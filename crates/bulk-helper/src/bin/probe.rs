@@ -10,14 +10,23 @@ use std::time::{Duration, Instant};
 use bulk_core::helper::{self, Client};
 
 fn main() -> anyhow::Result<()> {
-    let letter = std::env::args().nth(1).and_then(|s| s.chars().next()).unwrap_or('C');
+    let letter = std::env::args()
+        .nth(1)
+        .and_then(|s| s.chars().next())
+        .unwrap_or('C');
     let client = Client::new()?;
 
     let t0 = Instant::now();
     if !client.ensure_running(Duration::from_secs(5)) {
         println!("helper not running; installing task (UAC prompt)...");
-        anyhow::ensure!(helper::install_elevated(&helper::helper_exe())?, "install declined or failed");
-        anyhow::ensure!(client.ensure_running(Duration::from_secs(5)), "helper did not start");
+        anyhow::ensure!(
+            helper::install_elevated(&helper::helper_exe())?,
+            "install declined or failed"
+        );
+        anyhow::ensure!(
+            client.ensure_running(Duration::from_secs(5)),
+            "helper did not start"
+        );
     }
     println!("helper up in {:?}: {:?}", t0.elapsed(), client.hello()?);
 

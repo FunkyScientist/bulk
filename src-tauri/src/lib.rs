@@ -34,6 +34,9 @@ pub fn run() {
             commands::set_sort,
             commands::reveal,
             commands::node_path,
+            commands::ancestors,
+            commands::treemap,
+            commands::node_info,
             commands::show_in_explorer,
             commands::backdrop,
         ])

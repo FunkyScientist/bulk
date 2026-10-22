@@ -4,8 +4,8 @@
 use rayon::prelude::*;
 use windows_sys::Win32::Foundation::{GetLastError, INVALID_HANDLE_VALUE, NO_ERROR};
 use windows_sys::Win32::Storage::FileSystem::{
-    FIND_FIRST_EX_LARGE_FETCH, FindClose, FindExInfoBasic, FindExSearchNameMatch,
-    FindFirstFileExW, FindNextFileW, GetCompressedFileSizeW, INVALID_FILE_SIZE, WIN32_FIND_DATAW,
+    FIND_FIRST_EX_LARGE_FETCH, FindClose, FindExInfoBasic, FindExSearchNameMatch, FindFirstFileExW,
+    FindNextFileW, GetCompressedFileSizeW, INVALID_FILE_SIZE, WIN32_FIND_DATAW,
 };
 
 use super::*;

@@ -1,4 +1,4 @@
-﻿//! Binary encoding of a `Tree`, shared by the helper pipe and snapshot files.
+//! Binary encoding of a `Tree`, shared by the helper pipe and snapshot files.
 
 use std::io::{Read, Write};
 
@@ -51,9 +51,7 @@ pub fn read_tree(r: &mut impl Read) -> std::io::Result<Tree> {
             return Err(invalid("corrupt node link"));
         }
         let end = n.name_off as usize + n.name_len as usize;
-        if end > name_len
-            || !std::str::from_utf8(&names[n.name_off as usize..end]).is_ok()
-        {
+        if end > name_len || !std::str::from_utf8(&names[n.name_off as usize..end]).is_ok() {
             return Err(invalid("corrupt node name"));
         }
     }

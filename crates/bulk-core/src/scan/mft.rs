@@ -1,4 +1,4 @@
-﻿//! NTFS master file table reader. Reads `$MFT` straight off the raw volume in large
+//! NTFS master file table reader. Reads `$MFT` straight off the raw volume in large
 //! parallel chunks, parses every file record, then links records into a tree by
 //! their parent references. Needs admin rights to open `\\.\X:`.
 
@@ -8,8 +8,8 @@ use std::sync::Mutex;
 use rayon::prelude::*;
 use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAG_NO_BUFFERING, FILE_FLAG_OVERLAPPED, FILE_SHARE_DELETE,
-    FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, ReadFile,
+    CreateFileW, FILE_FLAG_NO_BUFFERING, FILE_FLAG_OVERLAPPED, FILE_SHARE_DELETE, FILE_SHARE_READ,
+    FILE_SHARE_WRITE, OPEN_EXISTING, ReadFile,
 };
 use windows_sys::Win32::System::IO::{DeviceIoControl, GetOverlappedResult, OVERLAPPED};
 use windows_sys::Win32::System::Ioctl::{FSCTL_GET_NTFS_VOLUME_DATA, NTFS_VOLUME_DATA_BUFFER};
@@ -293,8 +293,17 @@ pub fn scan_volume(vol: &Volume, letter: char, progress: &Progress) -> anyhow::R
     Ok(build_tree(results, total_records as usize, letter))
 }
 
-fn parse_chunk(buf: &mut [u8], first_rec: u32, rs: usize, sector: usize, progress: &Progress) -> Parsed {
-    let mut out = Parsed { first_rec, ..Parsed::default() };
+fn parse_chunk(
+    buf: &mut [u8],
+    first_rec: u32,
+    rs: usize,
+    sector: usize,
+    progress: &Progress,
+) -> Parsed {
+    let mut out = Parsed {
+        first_rec,
+        ..Parsed::default()
+    };
     let count = buf.len() / rs;
     out.recs.reserve(count);
     out.names.reserve(count);
@@ -316,7 +325,11 @@ fn parse_chunk(buf: &mut [u8], first_rec: u32, rs: usize, sector: usize, progres
         }
         let seq = u16le(rec, 16);
         let base_ref = u64le(rec, 32);
-        let base = if base_ref & 0xFFFF_FFFF_FFFF == 0 { NONE } else { base_ref as u32 };
+        let base = if base_ref & 0xFFFF_FFFF_FFFF == 0 {
+            NONE
+        } else {
+            base_ref as u32
+        };
         let owner = if base == NONE { idx } else { base };
         let is_dir = rflags & 2 != 0;
 
@@ -381,7 +394,11 @@ fn parse_chunk(buf: &mut [u8], first_rec: u32, rs: usize, sector: usize, progres
                 AT_REPARSE_POINT => {
                     r.flags |= flags::REPARSE;
                     // IO_REPARSE_TAG_CLOUD_*: a OneDrive-style placeholder.
-                    let tag = if a.nonresident { 0 } else { u32le(a.value(), 0) };
+                    let tag = if a.nonresident {
+                        0
+                    } else {
+                        u32le(a.value(), 0)
+                    };
                     if tag & 0xFFFF_0FFF == 0x9000_001A {
                         r.flags |= flags::OFFLINE;
                     }
@@ -443,7 +460,11 @@ fn build_tree(results: Vec<Parsed>, total: usize, letter: char) -> Tree {
         }
     }
 
-    let mut tree = Tree::with_capacity(&format!("{}:", letter.to_ascii_uppercase()), name_count, text_len);
+    let mut tree = Tree::with_capacity(
+        &format!("{}:", letter.to_ascii_uppercase()),
+        name_count,
+        text_len,
+    );
     let root = tree.root;
     let mut node_of = vec![NONE; info.len()];
     node_of[ROOT_RECORD as usize] = root;
@@ -469,7 +490,11 @@ fn build_tree(results: Vec<Parsed>, total: usize, letter: char) -> Tree {
             }
             let name = &p.text[n.off as usize..n.off as usize + n.len as usize];
             let mut f = m.flags;
-            let (size, alloc) = if f & flags::DIR != 0 { (0, 0) } else { (m.size, m.alloc) };
+            let (size, alloc) = if f & flags::DIR != 0 {
+                (0, 0)
+            } else {
+                (m.size, m.alloc)
+            };
             if node_of[rec] != NONE {
                 f |= flags::EXTRA_LINK;
             }
@@ -605,7 +630,10 @@ impl<'a> Attrs<'a> {
     fn new(rec: &'a [u8]) -> Attrs<'a> {
         let first = u16le(rec, 20) as usize;
         let used = (u32le(rec, 24) as usize).min(rec.len());
-        Attrs { rec: &rec[..used], pos: first }
+        Attrs {
+            rec: &rec[..used],
+            pos: first,
+        }
     }
 }
 
@@ -637,15 +665,18 @@ impl<'a> Iterator for Attrs<'a> {
 
 #[inline]
 fn u16le(b: &[u8], o: usize) -> u16 {
-    b.get(o..o + 2).map_or(0, |s| u16::from_le_bytes([s[0], s[1]]))
+    b.get(o..o + 2)
+        .map_or(0, |s| u16::from_le_bytes([s[0], s[1]]))
 }
 #[inline]
 fn u32le(b: &[u8], o: usize) -> u32 {
-    b.get(o..o + 4).map_or(0, |s| u32::from_le_bytes(s.try_into().unwrap()))
+    b.get(o..o + 4)
+        .map_or(0, |s| u32::from_le_bytes(s.try_into().unwrap()))
 }
 #[inline]
 fn u64le(b: &[u8], o: usize) -> u64 {
-    b.get(o..o + 8).map_or(0, |s| u64::from_le_bytes(s.try_into().unwrap()))
+    b.get(o..o + 8)
+        .map_or(0, |s| u64::from_le_bytes(s.try_into().unwrap()))
 }
 
 #[cfg(test)]
@@ -655,9 +686,14 @@ mod tests {
     #[test]
     fn runlist_decoding() {
         // 0x21: 1-byte length, 2-byte offset. Second run goes backwards; third is sparse.
-        let runs = [0x21, 0x10, 0x00, 0x01, 0x21, 0x08, 0x00, 0xFF, 0x01, 0x04, 0x00];
+        let runs = [
+            0x21, 0x10, 0x00, 0x01, 0x21, 0x08, 0x00, 0xFF, 0x01, 0x04, 0x00,
+        ];
         let r = decode_runs(&runs);
-        assert_eq!(r, vec![(Some(0x100), 0x10), (Some(0x100 - 0x100), 0x08), (None, 4)]);
+        assert_eq!(
+            r,
+            vec![(Some(0x100), 0x10), (Some(0x100 - 0x100), 0x08), (None, 4)]
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-﻿//! Protocol and client for `bulk-helper.exe`, the elevated process that reads raw
+//! Protocol and client for `bulk-helper.exe`, the elevated process that reads raw
 //! NTFS volumes on behalf of the (non-admin) app.
 //!
 //! Each connection carries a single request. The helper answers with a stream of
@@ -39,16 +39,26 @@ const MAX_EVENT: u32 = 16 << 20;
 pub enum Request {
     Hello,
     /// Full MFT scan of a drive. Answered with progress events, a tree frame, `Done`.
-    Scan { letter: char },
+    Scan {
+        letter: char,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Event {
-    Hello { protocol: u32, version: String, exe: String },
+    Hello {
+        protocol: u32,
+        version: String,
+        exe: String,
+    },
     Progress(ProgressInfo),
-    Error { message: String },
-    Done { elapsed_ms: u64 },
+    Error {
+        message: String,
+    },
+    Done {
+        elapsed_ms: u64,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
@@ -98,7 +108,10 @@ pub fn read_frame_header(r: &mut impl Read) -> std::io::Result<(u8, u32)> {
 pub fn read_frame(r: &mut impl Read) -> std::io::Result<(u8, Vec<u8>)> {
     let (kind, len) = read_frame_header(r)?;
     if len > MAX_EVENT {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "frame too large"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "frame too large",
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     r.read_exact(&mut buf)?;
@@ -119,12 +132,21 @@ pub fn current_user_sid() -> anyhow::Result<String> {
         );
         let mut buf = vec![0u8; 256];
         let mut len = 0u32;
-        let ok = GetTokenInformation(token, TokenUser, buf.as_mut_ptr() as _, buf.len() as u32, &mut len);
+        let ok = GetTokenInformation(
+            token,
+            TokenUser,
+            buf.as_mut_ptr() as _,
+            buf.len() as u32,
+            &mut len,
+        );
         CloseHandle(token);
         anyhow::ensure!(ok != 0, "GetTokenInformation failed");
         let user = &*(buf.as_ptr() as *const TOKEN_USER);
         let mut s: *mut u16 = std::ptr::null_mut();
-        anyhow::ensure!(ConvertSidToStringSidW(user.User.Sid, &mut s) != 0, "bad SID");
+        anyhow::ensure!(
+            ConvertSidToStringSidW(user.User.Sid, &mut s) != 0,
+            "bad SID"
+        );
         let n = (0..).take_while(|&i| *s.add(i) != 0).count();
         let out = String::from_utf16_lossy(std::slice::from_raw_parts(s, n));
         LocalFree(s as _);
@@ -151,7 +173,9 @@ pub struct Client {
 
 impl Client {
     pub fn new() -> anyhow::Result<Client> {
-        Ok(Client { pipe: pipe_name(&current_user_sid()?) })
+        Ok(Client {
+            pipe: pipe_name(&current_user_sid()?),
+        })
     }
 
     fn connect(&self) -> std::io::Result<File> {
@@ -205,7 +229,8 @@ impl Client {
         loop {
             let (kind, len) = read_frame_header(&mut c)?;
             if kind == FRAME_TREE {
-                let mut body = std::io::BufReader::with_capacity(1 << 20, (&mut c).take(len as u64));
+                let mut body =
+                    std::io::BufReader::with_capacity(1 << 20, (&mut c).take(len as u64));
                 tree = Some(wire::read_tree(&mut body)?);
                 continue;
             }
@@ -260,8 +285,12 @@ pub fn uninstall_elevated(helper: &Path) -> anyhow::Result<bool> {
 }
 
 fn shell_runas(exe: &Path, args: &str) -> anyhow::Result<Option<u32>> {
-    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, INFINITE, WaitForSingleObject};
-    use windows_sys::Win32::UI::Shell::{SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, INFINITE, WaitForSingleObject,
+    };
+    use windows_sys::Win32::UI::Shell::{
+        SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW,
+    };
 
     let verb = crate::wide::wide("runas");
     let file = crate::wide::wide(exe);

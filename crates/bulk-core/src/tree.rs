@@ -113,7 +113,12 @@ impl Tree {
     /// Rebuild a tree from raw parts (used by snapshot loading).
     pub fn from_parts(nodes: Vec<Node>, names: Vec<u8>, root: NodeId) -> Tree {
         let lower = names.to_ascii_lowercase();
-        Tree { nodes, names, lower, root }
+        Tree {
+            nodes,
+            names,
+            lower,
+            root,
+        }
     }
 
     pub fn parts(&self) -> (&[Node], &[u8]) {
@@ -167,7 +172,8 @@ impl Tree {
         let name = truncate_utf8(name, u16::MAX as usize);
         let off = self.names.len() as u32;
         self.names.extend_from_slice(name.as_bytes());
-        self.lower.extend(name.bytes().map(|b| b.to_ascii_lowercase()));
+        self.lower
+            .extend(name.bytes().map(|b| b.to_ascii_lowercase()));
         let id = self.nodes.len() as NodeId;
         self.nodes.push(Node {
             name_off: off,
@@ -264,13 +270,22 @@ impl Tree {
                 n[b as usize].size.cmp(&n[a as usize].size).then(a.cmp(&b))
             }),
             SortKey::Alloc => v.sort_unstable_by(|&a, &b| {
-                n[b as usize].alloc.cmp(&n[a as usize].alloc).then(a.cmp(&b))
+                n[b as usize]
+                    .alloc
+                    .cmp(&n[a as usize].alloc)
+                    .then(a.cmp(&b))
             }),
             SortKey::Files => v.sort_unstable_by(|&a, &b| {
-                n[b as usize].files.cmp(&n[a as usize].files).then(a.cmp(&b))
+                n[b as usize]
+                    .files
+                    .cmp(&n[a as usize].files)
+                    .then(a.cmp(&b))
             }),
             SortKey::Modified => v.sort_unstable_by(|&a, &b| {
-                n[b as usize].mtime.cmp(&n[a as usize].mtime).then(a.cmp(&b))
+                n[b as usize]
+                    .mtime
+                    .cmp(&n[a as usize].mtime)
+                    .then(a.cmp(&b))
             }),
             SortKey::Name => v.sort_by(|&a, &b| {
                 let (na, nb) = (&self.nodes[a as usize], &self.nodes[b as usize]);
@@ -327,7 +342,9 @@ impl Tree {
         let rest = rest.strip_prefix('\\')?;
         let mut cur = self.root;
         for part in rest.split('\\').filter(|p| !p.is_empty()) {
-            cur = self.children(cur).find(|&c| self.name_lower(c) == part.as_bytes())?;
+            cur = self
+                .children(cur)
+                .find(|&c| self.name_lower(c) == part.as_bytes())?;
         }
         Some(cur)
     }
@@ -421,7 +438,13 @@ impl Tree {
             return;
         }
         if !n.has(flags::EXTRA_LINK) {
-            self.propagate(id, -(n.size as i64), -(n.alloc as i64), -(n.files as i64), 0);
+            self.propagate(
+                id,
+                -(n.size as i64),
+                -(n.alloc as i64),
+                -(n.files as i64),
+                0,
+            );
         }
         self.unlink(id);
         let mut stack = vec![id];
@@ -436,7 +459,13 @@ impl Tree {
         let n = self.nodes[id as usize];
         let counted = !n.has(flags::EXTRA_LINK);
         if counted {
-            self.propagate(id, -(n.size as i64), -(n.alloc as i64), -(n.files as i64), 0);
+            self.propagate(
+                id,
+                -(n.size as i64),
+                -(n.alloc as i64),
+                -(n.files as i64),
+                0,
+            );
         }
         self.unlink(id);
         self.link(id, new_parent);
@@ -450,7 +479,8 @@ impl Tree {
         let name = truncate_utf8(name, u16::MAX as usize);
         let off = self.names.len() as u32;
         self.names.extend_from_slice(name.as_bytes());
-        self.lower.extend(name.bytes().map(|b| b.to_ascii_lowercase()));
+        self.lower
+            .extend(name.bytes().map(|b| b.to_ascii_lowercase()));
         let n = &mut self.nodes[id as usize];
         n.name_off = off;
         n.name_len = name.len() as u16;
@@ -560,7 +590,10 @@ mod tests {
         assert_eq!(t.get(users).mtime, 20);
         assert_eq!(t.path(a), "C:\\Users\\a.bin");
         assert_eq!(t.path(t.root), "C:\\");
-        assert_eq!(t.find_path("c:\\users\\b.TXT"), t.children(users).find(|&c| t.name(c) == "B.txt"));
+        assert_eq!(
+            t.find_path("c:\\users\\b.TXT"),
+            t.children(users).find(|&c| t.name(c) == "B.txt")
+        );
         assert_eq!(t.find_path("C:\\"), Some(t.root));
         assert_eq!(t.find_path("D:\\x"), None);
     }

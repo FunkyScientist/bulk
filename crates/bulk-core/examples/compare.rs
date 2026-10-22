@@ -7,7 +7,9 @@ use std::collections::HashMap;
 use bulk_core::scan::{self, Progress};
 
 fn main() -> anyhow::Result<()> {
-    let folder = std::env::args().nth(1).unwrap_or_else(|| r"C:\Windows".into());
+    let folder = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| r"C:\Windows".into());
     let letter = folder.chars().next().unwrap();
     let vol = bulk_core::volume::query(letter).unwrap();
 
@@ -34,7 +36,15 @@ fn main() -> anyhow::Result<()> {
         let p = mft.path(id);
         if let Some(&(ws, wa)) = walked.get(&p.to_ascii_lowercase()) {
             if wa != n.alloc || ws != n.size {
-                diffs.push((wa as i64 - n.alloc as i64, p, n.size, n.alloc, ws, wa, n.flags));
+                diffs.push((
+                    wa as i64 - n.alloc as i64,
+                    p,
+                    n.size,
+                    n.alloc,
+                    ws,
+                    wa,
+                    n.flags,
+                ));
             }
         }
     }

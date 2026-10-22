@@ -62,16 +62,18 @@ pub fn helper_status(state: State<HelperState>) -> HelperStatus {
 /// Register the helper task (one UAC prompt). Resolves once the helper answers.
 #[tauri::command]
 pub async fn enable_fast_scan(app: AppHandle) -> Res<HelperStatus> {
-    let ok = tauri::async_runtime::spawn_blocking(|| helper::install_elevated(&helper::helper_exe()))
-        .await
-        .map_err(err)?
-        .map_err(err)?;
+    let ok =
+        tauri::async_runtime::spawn_blocking(|| helper::install_elevated(&helper::helper_exe()))
+            .await
+            .map_err(err)?
+            .map_err(err)?;
     if !ok {
         return Err("cancelled".into());
     }
     let status = tauri::async_runtime::spawn_blocking(|| {
         let c = helper::Client::new().ok()?;
-        c.ensure_running(std::time::Duration::from_secs(6)).then_some(())
+        c.ensure_running(std::time::Duration::from_secs(6))
+            .then_some(())
     })
     .await
     .map_err(err)?
@@ -88,7 +90,13 @@ pub fn scan(app: AppHandle, letter: char, on_event: Channel<ScanEvent>) -> Res<(
 
 #[tauri::command]
 pub fn cancel_scan(state: State<AppState>, letter: char) {
-    if let Some(p) = state.drives.lock().unwrap().get(&letter).and_then(|d| d.scan.clone()) {
+    if let Some(p) = state
+        .drives
+        .lock()
+        .unwrap()
+        .get(&letter)
+        .and_then(|d| d.scan.clone())
+    {
         p.cancel();
     }
 }
@@ -103,14 +111,22 @@ pub struct RowsPage {
 pub fn rows(state: State<AppState>, letter: char, start: usize, count: usize) -> Res<RowsPage> {
     let drives = state.drives.lock().unwrap();
     let d = drives.get(&letter).ok_or("unknown drive")?;
-    let Some(tree) = &d.tree else { return Ok(RowsPage { total: 0, rows: vec![] }) };
+    let Some(tree) = &d.tree else {
+        return Ok(RowsPage {
+            total: 0,
+            rows: vec![],
+        });
+    };
     let v = &d.view;
     let end = (start + count.min(500)).min(v.rows.len());
     let rows = v.rows[start.min(end)..end]
         .iter()
         .map(|&(id, depth)| row(tree, id, depth, v.expanded.contains(&id)))
         .collect();
-    Ok(RowsPage { total: v.rows.len(), rows })
+    Ok(RowsPage {
+        total: v.rows.len(),
+        rows,
+    })
 }
 
 /// Expand or collapse a folder. Returns the new row count.
@@ -168,11 +184,141 @@ pub fn reveal(state: State<AppState>, letter: char, id: NodeId) -> Res<Option<us
 #[tauri::command]
 pub fn node_path(state: State<AppState>, letter: char, id: NodeId) -> Res<String> {
     let drives = state.drives.lock().unwrap();
-    let tree = drives.get(&letter).and_then(|d| d.tree.as_ref()).ok_or("not scanned")?;
+    let tree = drives
+        .get(&letter)
+        .and_then(|d| d.tree.as_ref())
+        .ok_or("not scanned")?;
     if id as usize >= tree.len() {
         return Err("bad node".into());
     }
     Ok(tree.path(id))
+}
+
+#[derive(Serialize)]
+pub struct Crumb {
+    id: NodeId,
+    name: String,
+}
+
+/// `id` and its ancestors, root first.
+#[tauri::command]
+pub fn ancestors(state: State<AppState>, letter: char, id: NodeId) -> Res<Vec<Crumb>> {
+    let drives = state.drives.lock().unwrap();
+    let tree = drives
+        .get(&letter)
+        .and_then(|d| d.tree.as_ref())
+        .ok_or("not scanned")?;
+    if id as usize >= tree.len() {
+        return Err("bad node".into());
+    }
+    let mut chain: Vec<NodeId> = vec![id];
+    chain.extend(tree.ancestors(id));
+    Ok(chain
+        .into_iter()
+        .rev()
+        .map(|id| Crumb {
+            id,
+            name: tree.name(id).to_string(),
+        })
+        .collect())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeInfo {
+    id: NodeId,
+    name: String,
+    path: String,
+    dir: bool,
+    flags: u16,
+    size: u64,
+    alloc: u64,
+    files: u32,
+    mtime: u32,
+    parent: Option<NodeId>,
+}
+
+#[tauri::command]
+pub fn node_info(state: State<AppState>, letter: char, id: NodeId) -> Res<NodeInfo> {
+    let drives = state.drives.lock().unwrap();
+    let tree = drives
+        .get(&letter)
+        .and_then(|d| d.tree.as_ref())
+        .ok_or("not scanned")?;
+    if id as usize >= tree.len() {
+        return Err("bad node".into());
+    }
+    let n = tree.get(id);
+    Ok(NodeInfo {
+        id,
+        name: tree.name(id).to_string(),
+        path: tree.path(id),
+        dir: n.is_dir(),
+        flags: n.flags,
+        size: n.size,
+        alloc: n.alloc,
+        files: n.files,
+        mtime: n.mtime,
+        parent: (n.parent != bulk_core::tree::NONE).then_some(n.parent),
+    })
+}
+
+/// Treemap tiles for `root`, packed as binary:
+/// `u32 count`, then per tile `f32 x, y, w, h; u32 id; u8 depth, flags, category, 0; u64 value`,
+/// then `u32 labels` and per label `u32 id; u16 len; utf-8 bytes`.
+#[tauri::command]
+pub fn treemap(
+    state: State<AppState>,
+    letter: char,
+    root: Option<NodeId>,
+    width: f32,
+    height: f32,
+) -> Res<tauri::ipc::Response> {
+    use bulk_core::layout::{TreemapOptions, tile_flags, treemap};
+    let drives = state.drives.lock().unwrap();
+    let d = drives.get(&letter).ok_or("unknown drive")?;
+    let tree = d.tree.as_ref().ok_or("not scanned")?;
+    let root = root
+        .filter(|&r| (r as usize) < tree.len())
+        .unwrap_or(tree.root);
+    let opts = TreemapOptions {
+        width: width.clamp(1.0, 16384.0),
+        height: height.clamp(1.0, 16384.0),
+        use_alloc: d.view.sort != SortKey::Size,
+        ..Default::default()
+    };
+    let tiles = treemap(tree, root, &opts);
+
+    let mut out = Vec::with_capacity(8 + tiles.len() * 32);
+    out.extend_from_slice(&(tiles.len() as u32).to_le_bytes());
+    for t in &tiles {
+        for v in [t.rect.x, t.rect.y, t.rect.w, t.rect.h] {
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        out.extend_from_slice(&t.id.to_le_bytes());
+        out.extend_from_slice(&[t.depth, t.flags, t.category, 0]);
+        let n = tree.get(t.id);
+        let value = if opts.use_alloc { n.alloc } else { n.size };
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    // Names only for tiles big enough to show text.
+    let labelled: Vec<_> = tiles
+        .iter()
+        .filter(|t| t.flags & tile_flags::HEADER != 0 || (t.rect.w >= 44.0 && t.rect.h >= 16.0))
+        .collect();
+    out.extend_from_slice(&(labelled.len() as u32).to_le_bytes());
+    for t in labelled {
+        let name = tree.name(t.id).as_bytes();
+        let name = &name[..name.len().min(200)];
+        let name = match std::str::from_utf8(name) {
+            Ok(s) => s.as_bytes(),
+            Err(e) => &name[..e.valid_up_to()],
+        };
+        out.extend_from_slice(&t.id.to_le_bytes());
+        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        out.extend_from_slice(name);
+    }
+    Ok(tauri::ipc::Response::new(out))
 }
 
 #[tauri::command]
@@ -188,5 +334,9 @@ pub fn show_in_explorer(path: String) -> Res<()> {
 
 #[tauri::command]
 pub fn backdrop() -> &'static str {
-    if crate::win::has_mica() { "mica" } else { "solid" }
+    if crate::win::has_mica() {
+        "mica"
+    } else {
+        "solid"
+    }
 }

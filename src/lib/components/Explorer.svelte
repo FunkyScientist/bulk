@@ -9,10 +9,30 @@
   import type { Drive } from '$lib/api';
   import { ago, bytes, count, duration } from '$lib/format';
   import TreeList from './TreeList.svelte';
+  import VisualPane from './VisualPane.svelte';
 
   let { drive }: { drive: Drive } = $props();
   const scan = $derived(app.scans[drive.letter]);
   const scanning = $derived(app.isScanning(drive.letter));
+
+  let body: HTMLDivElement;
+  let dragging = $state(false);
+  function startDrag(e: PointerEvent) {
+    dragging = true;
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const r = body.getBoundingClientRect();
+      app.setSplit((ev.clientX - r.left) / r.width);
+    };
+    const up = () => {
+      dragging = false;
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  }
 </script>
 
 <div class="flex h-full flex-col" in:fade={{ duration: 160 }}>
@@ -64,12 +84,54 @@
     </div>
   </div>
 
-  <div class="min-h-0 flex-1">
-    <TreeList letter={drive.letter} />
+  <div class="flex min-h-0 flex-1" bind:this={body}>
+    <div class="min-w-0" style="width: {app.split * 100}%">
+      <TreeList letter={drive.letter} />
+    </div>
+    <div
+      class="splitter"
+      class:dragging
+      role="separator"
+      aria-orientation="vertical"
+      tabindex="-1"
+      onpointerdown={startDrag}
+    ></div>
+    <div class="min-w-0 flex-1">
+      <VisualPane letter={drive.letter} />
+    </div>
   </div>
 </div>
 
 <style>
+  .splitter {
+    position: relative;
+    width: 1px;
+    background: var(--line);
+    cursor: col-resize;
+  }
+  .splitter::after {
+    content: '';
+    position: absolute;
+    inset: 0 -4px;
+  }
+  .splitter::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -1.5px;
+    width: 4px;
+    height: 32px;
+    margin-top: -16px;
+    border-radius: 4px;
+    background: var(--line-strong);
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+  .splitter:hover::before,
+  .splitter.dragging::before {
+    opacity: 1;
+    background: var(--accent);
+  }
   .dot {
     width: 6px;
     height: 6px;

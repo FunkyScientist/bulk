@@ -31,7 +31,9 @@ pub struct HelperState {
 
 impl Default for HelperState {
     fn default() -> Self {
-        HelperState { status: Mutex::new(HelperStatus::Checking) }
+        HelperState {
+            status: Mutex::new(HelperStatus::Checking),
+        }
     }
 }
 
@@ -48,7 +50,8 @@ pub fn refresh_drives(app: &AppHandle) {
     let state = app.state::<AppState>();
     let mut drives = state.drives.lock().unwrap();
     let vols = volume::list();
-    drives.retain(|l, d| d.tree.is_some() || d.scan.is_some() || vols.iter().any(|v| v.letter == *l));
+    drives
+        .retain(|l, d| d.tree.is_some() || d.scan.is_some() || vols.iter().any(|v| v.letter == *l));
     for v in vols {
         match drives.get_mut(&v.letter) {
             Some(d) => d.vol = v,
@@ -68,9 +71,15 @@ pub fn check_helper(app: AppHandle) {
 }
 
 fn probe_helper() -> HelperStatus {
-    let Ok(client) = Client::new() else { return HelperStatus::NotInstalled };
+    let Ok(client) = Client::new() else {
+        return HelperStatus::NotInstalled;
+    };
     if !client.ensure_running(Duration::from_secs(4)) {
-        return if helper::task_installed() { HelperStatus::Outdated } else { HelperStatus::NotInstalled };
+        return if helper::task_installed() {
+            HelperStatus::Outdated
+        } else {
+            HelperStatus::NotInstalled
+        };
     }
     match client.hello() {
         Ok(Event::Hello { protocol, exe, .. })
@@ -90,10 +99,18 @@ pub fn helper_ready(app: &AppHandle) -> bool {
 #[derive(Serialize, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ScanEvent {
-    Started { method: &'static str },
+    Started {
+        method: &'static str,
+    },
     Progress(ProgressInfo),
-    Done { elapsed_ms: u64, files: u32, alloc: u64 },
-    Error { message: String },
+    Done {
+        elapsed_ms: u64,
+        files: u32,
+        alloc: u64,
+    },
+    Error {
+        message: String,
+    },
     Cancelled,
 }
 
@@ -124,7 +141,9 @@ pub fn start(app: AppHandle, letter: char, channel: Channel<ScanEvent>) -> Resul
 
         let state = app.state::<AppState>();
         let mut drives = state.drives.lock().unwrap();
-        let Some(d) = drives.get_mut(&letter) else { return };
+        let Some(d) = drives.get_mut(&letter) else {
+            return;
+        };
         d.scan = None;
         match result {
             Ok(tree) => {
@@ -143,7 +162,9 @@ pub fn start(app: AppHandle, letter: char, channel: Channel<ScanEvent>) -> Resul
                 let _ = channel.send(ScanEvent::Cancelled);
             }
             Err(e) => {
-                let _ = channel.send(ScanEvent::Error { message: format!("{e:#}") });
+                let _ = channel.send(ScanEvent::Error {
+                    message: format!("{e:#}"),
+                });
             }
         }
     });
@@ -184,5 +205,7 @@ fn scan_via_walk(
 }
 
 pub fn now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }

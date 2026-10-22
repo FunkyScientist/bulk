@@ -8,7 +8,11 @@ use tauri::window::{Effect, EffectsBuilder};
 static MICA: AtomicBool = AtomicBool::new(false);
 
 pub fn apply_backdrop(window: &WebviewWindow) {
-    if windows_build() >= 22000 && window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build()).is_ok() {
+    if windows_build() >= 22000
+        && window
+            .set_effects(EffectsBuilder::new().effect(Effect::Mica).build())
+            .is_ok()
+    {
         MICA.store(true, Ordering::Relaxed);
     }
 }

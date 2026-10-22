@@ -1,4 +1,4 @@
-﻿//! Filesystem scanners. `walk` works anywhere without privileges; `mft` reads the
+//! Filesystem scanners. `walk` works anywhere without privileges; `mft` reads the
 //! NTFS master file table directly and needs admin rights.
 
 pub mod mft;
@@ -79,5 +79,7 @@ pub(crate) fn attr_flags(attrs: u32) -> u16 {
 #[inline]
 pub(crate) fn filetime_to_unix(ft: u64) -> u32 {
     const EPOCH_DIFF: u64 = 11_644_473_600;
-    (ft / 10_000_000).saturating_sub(EPOCH_DIFF).min(u32::MAX as u64) as u32
+    (ft / 10_000_000)
+        .saturating_sub(EPOCH_DIFF)
+        .min(u32::MAX as u64) as u32
 }

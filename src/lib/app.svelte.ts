@@ -41,6 +41,12 @@ class AppState {
   /** Bumped whenever the current drive's rows change and must be refetched. */
   rowsVersion = $state(0);
   selected = $state<number | null>(null);
+  /** Folder the visualisation is zoomed into, per drive (null = drive root). */
+  focus = $state<Record<string, number | null>>({});
+  /** Asks the tree list to expand to and scroll to a node. */
+  revealRequest = $state<{ id: number; seq: number } | null>(null);
+  visual = $state<'treemap' | 'sunburst'>(readPref('bulk.visual', 'treemap'));
+  split = $state(Number(readPref('bulk.split', '0.5')) || 0.5);
 
   drive = $derived(this.drives.find((d) => d.letter === this.current) ?? null);
   resolvedTheme = $derived<'dark' | 'light'>(
@@ -84,6 +90,26 @@ class AppState {
     this.current = letter;
     this.selected = null;
     this.rowsVersion++;
+  }
+
+  /** Select a node; when it came from the visualisation, show it in the list too. */
+  selectNode(id: number, reveal = false) {
+    this.selected = id;
+    if (reveal) this.revealRequest = { id, seq: (this.revealRequest?.seq ?? 0) + 1 };
+  }
+
+  setFocus(letter: string, id: number | null) {
+    this.focus[letter] = id;
+  }
+
+  setVisual(v: 'treemap' | 'sunburst') {
+    this.visual = v;
+    writePref('bulk.visual', v);
+  }
+
+  setSplit(v: number) {
+    this.split = Math.min(0.75, Math.max(0.25, v));
+    writePref('bulk.split', String(this.split));
   }
 
   setTheme(t: ThemePref) {

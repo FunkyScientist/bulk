@@ -95,7 +95,7 @@
   }
 
   function select(row: Row) {
-    app.selected = row.id;
+    app.selectNode(row.id);
   }
 
   async function open(row: Row, index: number) {
@@ -109,12 +109,45 @@
     return Math.min(i - entering.from, 14) * 14;
   }
 
-  const columns: { key: SortKey; label: string; width: string; align?: 'right' }[] = [
-    { key: 'alloc', label: 'Size on disk', width: '108px', align: 'right' },
-    { key: 'size', label: 'Size', width: '96px', align: 'right' },
-    { key: 'files', label: 'Files', width: '88px', align: 'right' },
-    { key: 'modified', label: 'Modified', width: '110px', align: 'right' },
+  /** Optional columns drop out as the list gets narrower. */
+  const allColumns: { key: SortKey; label: string; width: number; minWidth: number }[] = [
+    { key: 'alloc', label: 'On disk', width: 84, minWidth: 0 },
+    { key: 'size', label: 'Size', width: 80, minWidth: 640 },
+    { key: 'files', label: 'Files', width: 80, minWidth: 740 },
+    { key: 'modified', label: 'Modified', width: 104, minWidth: 860 },
   ];
+  let listWidth = $state(800);
+  const columns = $derived(allColumns.filter((c) => listWidth >= c.minWidth));
+  const showShare = $derived(listWidth >= 460);
+
+  function cell(row: Row, key: SortKey) {
+    switch (key) {
+      case 'alloc':
+        return bytes(row.alloc);
+      case 'size':
+        return bytes(row.size);
+      case 'files':
+        return row.dir ? count(row.files) : '';
+      case 'modified':
+        return ago(row.mtime);
+      default:
+        return '';
+    }
+  }
+
+  // Scroll to a node picked in the visualisation.
+  $effect(() => {
+    const req = app.revealRequest;
+    if (!req) return;
+    untrack(async () => {
+      const index = await api.reveal(letter, req.id);
+      if (index === null) return;
+      await refetch();
+      const top = index * ROW - height / 2 + ROW / 2;
+      const visibleNow = index * ROW >= scrollTop && (index + 1) * ROW <= scrollTop + height;
+      if (!visibleNow) viewport.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    });
+  });
 
   function iconColor(row: Row) {
     if (row.flags & (Flags.EXTRA_LINK | Flags.REPARSE)) return 'text-fg-subtle';
@@ -122,22 +155,22 @@
   }
 </script>
 
-<div class="flex h-full min-w-0 flex-col">
+<div class="flex h-full min-w-0 flex-col" bind:clientWidth={listWidth}>
   <div
-    class="header flex h-8 shrink-0 items-center border-b border-line pr-3 text-[11.5px] text-fg-subtle"
+    class="header flex h-8 shrink-0 items-center border-b border-line pr-[18px] pl-1.5 text-[11.5px] text-fg-subtle"
   >
     <button
-      class="hcell flex flex-1 items-center gap-1 pl-4 text-left"
+      class="hcell flex min-w-0 flex-1 items-center gap-1 pl-4 text-left"
       class:active={app.sort === 'name'}
       onclick={() => app.setSort('name')}
     >
       Name {#if app.sort === 'name'}<ArrowDown class="size-3 rotate-180" />{/if}
     </button>
-    <div class="w-[120px] pl-2">Share</div>
+    {#if showShare}<div class="w-[96px] shrink-0 pl-2">Share</div>{/if}
     {#each columns as c (c.key)}
       <button
-        class="hcell flex items-center justify-end gap-1"
-        style="width: {c.width}"
+        class="hcell flex shrink-0 items-center justify-end gap-1"
+        style="width: {c.width}px"
         class:active={app.sort === c.key}
         onclick={() => app.setSort(c.key)}
       >
@@ -202,20 +235,28 @@
                 {row.depth === 0 ? `${row.name}\\` : row.name}
               </span>
             </div>
-            <div class="flex w-[120px] items-center gap-2 pl-2">
-              <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-panel-2">
-                <div class="bar h-full rounded-full" style="width: {row.share * 100}%"></div>
+            {#if showShare}
+              <div class="flex w-[96px] shrink-0 items-center gap-2 pl-2">
+                <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-panel-2">
+                  <div class="bar h-full rounded-full" style="width: {row.share * 100}%"></div>
+                </div>
+                <span class="tabular w-9 text-right text-[11px] text-fg-subtle"
+                  >{percent(row.share)}</span
+                >
               </div>
-              <span class="tabular w-9 text-right text-[11px] text-fg-subtle"
-                >{percent(row.share)}</span
+            {/if}
+            {#each columns as c (c.key)}
+              <div
+                class="tabular shrink-0 truncate text-right {c.key === 'alloc'
+                  ? ''
+                  : c.key === 'modified'
+                    ? 'text-fg-subtle'
+                    : 'text-fg-muted'}"
+                style="width: {c.width}px"
               >
-            </div>
-            <div class="tabular w-[108px] text-right">{bytes(row.alloc)}</div>
-            <div class="tabular w-[96px] text-right text-fg-muted">{bytes(row.size)}</div>
-            <div class="tabular w-[88px] text-right text-fg-muted">
-              {row.dir ? count(row.files) : ''}
-            </div>
-            <div class="w-[110px] truncate text-right text-fg-subtle">{ago(row.mtime)}</div>
+                {cell(row, c.key)}
+              </div>
+            {/each}
           {:else}
             <div
               class="skeleton ml-4 h-2.5 rounded"

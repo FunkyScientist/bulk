@@ -2,8 +2,8 @@
 
 use serde::Serialize;
 use windows_sys::Win32::Storage::FileSystem::{
-    GetDiskFreeSpaceExW, GetDiskFreeSpaceW, GetDriveTypeW, GetLogicalDrives,
-    GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
+    GetDiskFreeSpaceExW, GetDiskFreeSpaceW, GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW,
+    GetVolumeNameForVolumeMountPointW,
 };
 
 use crate::wide::{from_wide, wide};
@@ -113,8 +113,9 @@ pub fn query(letter: char) -> Option<Volume> {
     unsafe { GetDiskFreeSpaceExW(wroot.as_ptr(), std::ptr::null_mut(), &mut total, &mut free) };
 
     let (mut spc, mut bps, mut _f, mut _t) = (0u32, 0u32, 0u32, 0u32);
-    let cluster = if unsafe { GetDiskFreeSpaceW(wroot.as_ptr(), &mut spc, &mut bps, &mut _f, &mut _t) }
-        != 0
+    let cluster = if unsafe {
+        GetDiskFreeSpaceW(wroot.as_ptr(), &mut spc, &mut bps, &mut _f, &mut _t)
+    } != 0
     {
         spc * bps
     } else {

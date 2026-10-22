@@ -1,4 +1,4 @@
-﻿//! Time a scan and print a summary.
+//! Time a scan and print a summary.
 //!
 //!     cargo run --release -p bulk-core --example bench -- C: [walk|mft]
 
@@ -35,7 +35,11 @@ fn main() -> anyhow::Result<()> {
         human(root.size),
         human(root.alloc),
     );
-    for id in tree.sorted_children(tree.root, SortKey::Alloc).into_iter().take(12) {
+    for id in tree
+        .sorted_children(tree.root, SortKey::Alloc)
+        .into_iter()
+        .take(12)
+    {
         let n = tree.get(id);
         println!("  {:>10}  {}", human(n.alloc), tree.name(id));
     }

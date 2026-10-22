@@ -1,4 +1,4 @@
-﻿//! Elevated helper for Bulk. Reads raw NTFS metadata (never file contents) and hands
+//! Elevated helper for Bulk. Reads raw NTFS metadata (never file contents) and hands
 //! it to the app over a named pipe that only the installing user can open.
 //!
 //!     bulk-helper --install --user <SID>   register the scheduled task (run elevated)
@@ -54,7 +54,9 @@ fn main() {
         Some("--serve") => serve(user),
         Some("--install") => install(user),
         Some("--uninstall") => uninstall(),
-        _ => Err(anyhow::anyhow!("usage: bulk-helper --serve|--install|--uninstall")),
+        _ => Err(anyhow::anyhow!(
+            "usage: bulk-helper --serve|--install|--uninstall"
+        )),
     };
     if let Err(e) = result {
         log(&format!("error: {e:#}"));
@@ -116,7 +118,10 @@ fn uninstall() -> anyhow::Result<()> {
 }
 
 fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn task_xml(sid: &str, exe: &Path) -> String {
@@ -170,7 +175,8 @@ struct Activity {
 
 impl Activity {
     fn touch(&self) {
-        self.last.store(self.start.elapsed().as_secs(), Ordering::Relaxed);
+        self.last
+            .store(self.start.elapsed().as_secs(), Ordering::Relaxed);
     }
 }
 
@@ -211,11 +217,13 @@ fn serve(user: Option<String>) -> anyhow::Result<()> {
     });
     {
         let a = activity.clone();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(Duration::from_secs(5));
-            let idle = a.start.elapsed().as_secs() - a.last.load(Ordering::Relaxed);
-            if a.active.load(Ordering::Relaxed) == 0 && idle >= IDLE_EXIT.as_secs() {
-                std::process::exit(0);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(Duration::from_secs(5));
+                let idle = a.start.elapsed().as_secs() - a.last.load(Ordering::Relaxed);
+                if a.active.load(Ordering::Relaxed) == 0 && idle >= IDLE_EXIT.as_secs() {
+                    std::process::exit(0);
+                }
             }
         });
     }
@@ -225,7 +233,12 @@ fn serve(user: Option<String>) -> anyhow::Result<()> {
         let h = unsafe {
             CreateNamedPipeW(
                 name.as_ptr(),
-                PIPE_ACCESS_DUPLEX | if first { FILE_FLAG_FIRST_PIPE_INSTANCE } else { 0 },
+                PIPE_ACCESS_DUPLEX
+                    | if first {
+                        FILE_FLAG_FIRST_PIPE_INSTANCE
+                    } else {
+                        0
+                    },
                 PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
                 PIPE_UNLIMITED_INSTANCES,
                 1 << 20,
@@ -285,7 +298,9 @@ fn client_allowed(pipe: isize) -> bool {
         return false;
     }
     let client = PathBuf::from(String::from_utf16_lossy(&buf[..len as usize]));
-    let Ok(me) = std::env::current_exe() else { return false };
+    let Ok(me) = std::env::current_exe() else {
+        return false;
+    };
     let same_dir = match (client.parent(), me.parent()) {
         (Some(a), Some(b)) => a.as_os_str().eq_ignore_ascii_case(b.as_os_str()),
         _ => false,
@@ -295,7 +310,12 @@ fn client_allowed(pipe: isize) -> bool {
 
 fn handle(mut conn: File, raw: isize) -> anyhow::Result<()> {
     if !client_allowed(raw) {
-        write_json(&mut conn, &Event::Error { message: "client not allowed".into() })?;
+        write_json(
+            &mut conn,
+            &Event::Error {
+                message: "client not allowed".into(),
+            },
+        )?;
         return Ok(());
     }
     let (_, body) = read_frame(&mut conn)?;
@@ -316,7 +336,12 @@ fn handle(mut conn: File, raw: isize) -> anyhow::Result<()> {
 
 fn scan_drive(conn: &mut File, letter: char) -> anyhow::Result<()> {
     if !letter.is_ascii_alphabetic() {
-        write_json(conn, &Event::Error { message: "bad drive letter".into() })?;
+        write_json(
+            conn,
+            &Event::Error {
+                message: "bad drive letter".into(),
+            },
+        )?;
         return Ok(());
     }
     let start = Instant::now();
@@ -352,9 +377,19 @@ fn scan_drive(conn: &mut File, letter: char) -> anyhow::Result<()> {
             bulk_core::wire::write_tree(&mut w, &tree)?;
             w.flush()?;
             drop(w);
-            write_json(conn, &Event::Done { elapsed_ms: start.elapsed().as_millis() as u64 })?;
+            write_json(
+                conn,
+                &Event::Done {
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                },
+            )?;
         }
-        Err(e) => write_json(conn, &Event::Error { message: format!("{e:#}") })?,
+        Err(e) => write_json(
+            conn,
+            &Event::Error {
+                message: format!("{e:#}"),
+            },
+        )?,
     }
     Ok(())
 }

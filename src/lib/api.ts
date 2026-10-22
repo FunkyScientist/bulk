@@ -68,7 +68,89 @@ export const Flags = {
   META: 1 << 9,
 } as const;
 
+export interface NodeInfo {
+  id: number;
+  name: string;
+  path: string;
+  dir: boolean;
+  flags: number;
+  size: number;
+  alloc: number;
+  files: number;
+  mtime: number;
+  parent: number | null;
+}
+
+export interface Crumb {
+  id: number;
+  name: string;
+}
+
+export const TileFlags = { DIR: 1, HEADER: 2, COLLAPSED: 4 } as const;
+
+/** Treemap tiles in struct-of-arrays form, straight from the binary response. */
+export interface Tiles {
+  count: number;
+  x: Float32Array;
+  y: Float32Array;
+  w: Float32Array;
+  h: Float32Array;
+  id: Uint32Array;
+  depth: Uint8Array;
+  flags: Uint8Array;
+  cat: Uint8Array;
+  value: Float64Array;
+  labels: Map<number, string>;
+}
+
+function decodeTiles(buf: ArrayBuffer): Tiles {
+  const dv = new DataView(buf);
+  const count = dv.getUint32(0, true);
+  const t: Tiles = {
+    count,
+    x: new Float32Array(count),
+    y: new Float32Array(count),
+    w: new Float32Array(count),
+    h: new Float32Array(count),
+    id: new Uint32Array(count),
+    depth: new Uint8Array(count),
+    flags: new Uint8Array(count),
+    cat: new Uint8Array(count),
+    value: new Float64Array(count),
+    labels: new Map(),
+  };
+  let o = 4;
+  for (let i = 0; i < count; i++, o += 32) {
+    t.x[i] = dv.getFloat32(o, true);
+    t.y[i] = dv.getFloat32(o + 4, true);
+    t.w[i] = dv.getFloat32(o + 8, true);
+    t.h[i] = dv.getFloat32(o + 12, true);
+    t.id[i] = dv.getUint32(o + 16, true);
+    t.depth[i] = dv.getUint8(o + 20);
+    t.flags[i] = dv.getUint8(o + 21);
+    t.cat[i] = dv.getUint8(o + 22);
+    t.value[i] = Number(dv.getBigUint64(o + 24, true));
+  }
+  const n = dv.getUint32(o, true);
+  o += 4;
+  const td = new TextDecoder();
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < n; i++) {
+    const id = dv.getUint32(o, true);
+    const len = dv.getUint16(o + 4, true);
+    t.labels.set(id, td.decode(bytes.subarray(o + 6, o + 6 + len)));
+    o += 6 + len;
+  }
+  return t;
+}
+
 export const api = {
+  async treemap(letter: string, root: number | null, width: number, height: number) {
+    const buf = await invoke<ArrayBuffer>('treemap', { letter, root, width, height });
+    return decodeTiles(buf);
+  },
+  nodeInfo: (letter: string, id: number) => invoke<NodeInfo>('node_info', { letter, id }),
+  ancestors: (letter: string, id: number) => invoke<Crumb[]>('ancestors', { letter, id }),
   drives: () => invoke<Drive[]>('drives'),
   helperStatus: () => invoke<HelperStatus>('helper_status'),
   enableFastScan: () => invoke<HelperStatus>('enable_fast_scan'),

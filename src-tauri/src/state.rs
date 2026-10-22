@@ -45,7 +45,11 @@ pub struct View {
 
 impl Default for View {
     fn default() -> Self {
-        View { expanded: HashSet::new(), sort: SortKey::Alloc, rows: Vec::new() }
+        View {
+            expanded: HashSet::new(),
+            sort: SortKey::Alloc,
+            rows: Vec::new(),
+        }
     }
 }
 
@@ -107,7 +111,11 @@ pub struct Row {
 
 pub fn row(tree: &Tree, id: NodeId, depth: u16, open: bool) -> Row {
     let n = tree.get(id);
-    let parent_alloc = if n.parent == bulk_core::tree::NONE { n.alloc } else { tree.get(n.parent).alloc };
+    let parent_alloc = if n.parent == bulk_core::tree::NONE {
+        n.alloc
+    } else {
+        tree.get(n.parent).alloc
+    };
     Row {
         id,
         depth,
@@ -120,6 +128,10 @@ pub fn row(tree: &Tree, id: NodeId, depth: u16, open: bool) -> Row {
         mtime: n.mtime,
         has_kids: tree.has_children(id),
         open,
-        share: if parent_alloc == 0 { 0.0 } else { (n.alloc as f64 / parent_alloc as f64) as f32 },
+        share: if parent_alloc == 0 {
+            0.0
+        } else {
+            (n.alloc as f64 / parent_alloc as f64) as f32
+        },
     }
 }
