@@ -95,9 +95,28 @@ pub async fn snapshot_storage() -> StorageInfo {
             }
         }
     }
+    let shown = redirected(&root).unwrap_or(root);
     StorageInfo {
-        path: root.to_string_lossy().into_owned(),
+        path: shown.to_string_lossy().into_owned(),
         bytes,
         files,
     }
+}
+
+/// When Bulk is started by a packaged (MSIX) app, such as during development,
+/// Windows silently redirects its `%LOCALAPPDATA%` writes into that package's
+/// folder. Explorer runs outside the package and would open the empty real
+/// folder, so find where a freshly written marker actually lands.
+fn redirected(path: &std::path::Path) -> Option<std::path::PathBuf> {
+    let local = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?);
+    let rest = path.strip_prefix(&local).ok()?;
+    let marker = format!(".bulk-where-{}", std::process::id());
+    std::fs::write(path.join(&marker), b"").ok()?;
+    let found = std::fs::read_dir(local.join("Packages"))
+        .ok()?
+        .flatten()
+        .map(|p| p.path().join(r"LocalCache\Local").join(rest))
+        .find(|p| p.join(&marker).exists());
+    let _ = std::fs::remove_file(path.join(&marker));
+    found
 }
