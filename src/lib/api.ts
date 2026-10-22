@@ -287,6 +287,8 @@ export const api = {
   cartClear: () => invoke<void>('cart_clear'),
   cartDelete: (permanent: boolean) => invoke<DeleteResult>('cart_delete', { permanent }),
   cartUndo: (id: number) => invoke<UndoResult>('cart_undo', { id }),
+  deleteNodes: (letter: string, ids: number[], permanent: boolean) =>
+    invoke<DeleteResult>('delete_nodes', { letter, ids, permanent }),
   search: (query: string, letter?: string) =>
     invoke<SearchResult>('search', { query, letter: letter ?? null }),
   history: (letter: string) => invoke<HistoryEntry[]>('history', { letter }),

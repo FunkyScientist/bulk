@@ -14,6 +14,7 @@
   import Toasts from '$lib/components/Toasts.svelte';
   import CartPanel from '$lib/components/CartPanel.svelte';
   import SettingsDialog from '$lib/components/SettingsDialog.svelte';
+  import DeleteDialog from '$lib/components/DeleteDialog.svelte';
   import RescanDialog from '$lib/components/RescanDialog.svelte';
 
   let palette = $state(false);
@@ -51,7 +52,7 @@
       palette = !palette;
       return;
     }
-    if (palette || typing(e)) return;
+    if (palette || app.deleteRequest || typing(e)) return;
     if (ctrl && key === 'b') {
       e.preventDefault();
       app.toggleSidebar();
@@ -77,6 +78,15 @@
       shortcuts = settings = rescan = app.cartOpen = false;
     } else if (e.key === 'Escape' && app.selected !== null && !app.menu) {
       app.selected = null;
+    } else if (
+      e.key === 'Delete' &&
+      e.shiftKey &&
+      drive &&
+      app.selected !== null &&
+      app.selected !== 0
+    ) {
+      e.preventDefault();
+      app.deleteRequest = { letter: drive.letter, id: app.selected };
     } else if (e.key === 'Delete' && drive && app.selected !== null && app.selected !== 0) {
       e.preventDefault();
       app.toggleCart(drive.letter, app.selected);
@@ -131,6 +141,7 @@
 <Shortcuts bind:open={shortcuts} />
 <CartPanel />
 <SettingsDialog bind:open={settings} />
+<DeleteDialog />
 <RescanDialog bind:open={rescan} />
 <ContextMenu />
 <Toasts />

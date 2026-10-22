@@ -74,28 +74,7 @@ pub fn cart_add(
     letter: char,
     ids: Vec<NodeId>,
 ) -> Res<Vec<CartItem>> {
-    let new: Vec<CartItem> = {
-        let drives = state.drives.lock().unwrap();
-        let tree = drives
-            .get(&letter)
-            .and_then(|d| d.tree.as_ref())
-            .ok_or("not scanned")?;
-        ids.into_iter()
-            .filter(|&id| (id as usize) < tree.len() && id != tree.root)
-            .map(|id| {
-                let n = tree.get(id);
-                CartItem {
-                    letter,
-                    id,
-                    path: tree.path(id),
-                    name: tree.name(id).to_string(),
-                    dir: n.is_dir(),
-                    alloc: n.alloc,
-                    files: n.files,
-                }
-            })
-            .collect()
-    };
+    let new = items_for(&state, letter, ids)?;
     let mut items = cart.items.lock().unwrap();
     for it in new {
         if items.iter().any(|x| within(&x.path, &it.path)) {
@@ -108,6 +87,48 @@ pub fn cart_add(
     drop(items);
     let _ = app.emit("cart-changed", out.len());
     Ok(out)
+}
+
+/// Cart entries for nodes of drive `letter` (the root and gone items are skipped).
+fn items_for(state: &AppState, letter: char, ids: Vec<NodeId>) -> Res<Vec<CartItem>> {
+    let drives = state.drives.lock().unwrap();
+    let tree = drives
+        .get(&letter)
+        .and_then(|d| d.tree.as_ref())
+        .ok_or("not scanned")?;
+    Ok(ids
+        .into_iter()
+        .filter(|&id| (id as usize) < tree.len() && id != tree.root)
+        .filter(|&id| !tree.get(id).has(bulk_core::tree::flags::GONE))
+        .map(|id| {
+            let n = tree.get(id);
+            CartItem {
+                letter,
+                id,
+                path: tree.path(id),
+                name: tree.name(id).to_string(),
+                dir: n.is_dir(),
+                alloc: n.alloc,
+                files: n.files,
+            }
+        })
+        .collect())
+}
+
+/// Delete nodes right away (Shift+Del or the right-click menu), without going
+/// through the cart. Same result and undo as emptying the cart.
+#[tauri::command]
+pub async fn delete_nodes(
+    app: AppHandle,
+    letter: char,
+    ids: Vec<NodeId>,
+    permanent: bool,
+) -> Res<DeleteResult> {
+    let items = items_for(&app.state::<AppState>(), letter, ids)?;
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || delete_items(&a, items, permanent))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -208,8 +229,9 @@ fn remove_from_tree(app: &AppHandle, it: &CartItem) {
         return;
     };
     let Some(tree) = d.tree.as_mut() else { return };
-    if (it.id as usize) < tree.len() && tree.path(it.id).eq_ignore_ascii_case(&it.path) {
-        tree.mark_gone(it.id);
+    // By path: ids from when it was added don't survive a rescan.
+    if let Some(id) = tree.find_path(&it.path) {
+        tree.mark_gone(id);
         d.view.rebuild(tree);
         d.dirty = true;
     }

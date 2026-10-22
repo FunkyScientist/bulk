@@ -31,42 +31,13 @@
     progress = [0, app.cart.length];
     try {
       const r = await api.cartDelete(permanent);
-      if (r.deleted) {
-        const what = `${count(r.deleted)} item${r.deleted === 1 ? '' : 's'}`;
-        app.toast(
-          permanent
-            ? `Deleted ${what} · freed ${bytes(r.freed)}`
-            : `Moved ${what} (${bytes(r.freed)}) to the Recycle Bin`,
-          {
-            tone: 'ok',
-            action:
-              r.undo !== null ? { label: 'Undo', run: () => undo(r.undo as number) } : undefined,
-          },
-        );
-      }
-      if (r.failed.length)
-        app.toast(`${r.failed.length} couldn't be deleted: ${r.failed[0].error}`, {
-          tone: 'error',
-          ms: 8000,
-        });
+      app.reportDelete(r, permanent);
       if (!app.cart.length || r.deleted) app.cartOpen = r.failed.length > 0;
     } finally {
       busy = false;
       progress = null;
       understood = false;
     }
-  }
-
-  async function undo(id: number) {
-    const r = await api.cartUndo(id);
-    if (r.restored)
-      app.toast(`Restored ${count(r.restored)} item${r.restored === 1 ? '' : 's'}`, { tone: 'ok' });
-    if (r.failed.length)
-      app.toast(`Couldn't restore ${r.failed.length}: ${r.failed[0].error}`, { tone: 'error' });
-    for (const l of r.needsRescan)
-      app.toast(`Rescan ${l}: to see restored items`, {
-        action: { label: 'Rescan', run: () => app.scan(l) },
-      });
   }
 </script>
 

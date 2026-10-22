@@ -69,6 +69,7 @@ pub fn run() {
             cart::cart_remove,
             cart::cart_clear,
             cart::cart_delete,
+            cart::delete_nodes,
             cart::cart_undo,
             dupes::dupes_start,
             dupes::dupes_cancel,

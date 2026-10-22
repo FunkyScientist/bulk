@@ -3,11 +3,13 @@ import type { Component } from 'svelte';
 import {
   api,
   type CartItem,
+  type DeleteResult,
   type Drive,
   type HelperStatus,
   type Progress,
   type SortKey,
 } from './api';
+import { bytes } from './format';
 
 export type ThemePref = 'system' | 'dark' | 'light';
 
@@ -234,6 +236,45 @@ class AppState {
 
   async removeFromCart(paths: string[]) {
     this.cart = await api.cartRemove(paths);
+  }
+
+  /** Asks for confirmation before deleting a node (Shift+Del, right-click → Delete). */
+  deleteRequest = $state<{ letter: string; id: number } | null>(null);
+
+  /** Report a delete (from the cart or the dialog) with an Undo for recycled items. */
+  reportDelete(r: DeleteResult, permanent: boolean) {
+    if (r.deleted) {
+      const what = r.deleted === 1 ? '1 item' : `${r.deleted.toLocaleString()} items`;
+      this.toast(
+        permanent
+          ? `Deleted ${what} · freed ${bytes(r.freed)}`
+          : `Moved ${what} (${bytes(r.freed)}) to the Recycle Bin`,
+        {
+          tone: 'ok',
+          action:
+            r.undo !== null
+              ? { label: 'Undo', run: () => this.undoDelete(r.undo as number) }
+              : undefined,
+        },
+      );
+    }
+    if (r.failed.length)
+      this.toast(`${r.failed.length} couldn't be deleted: ${r.failed[0].error}`, {
+        tone: 'error',
+        ms: 8000,
+      });
+  }
+
+  async undoDelete(id: number) {
+    const r = await api.cartUndo(id);
+    if (r.restored)
+      this.toast(`Restored ${r.restored === 1 ? '1 item' : `${r.restored} items`}`, { tone: 'ok' });
+    if (r.failed.length)
+      this.toast(`Couldn't restore ${r.failed.length}: ${r.failed[0].error}`, { tone: 'error' });
+    for (const l of r.needsRescan)
+      this.toast(`Rescan ${l}: to see restored items`, {
+        action: { label: 'Rescan', run: () => this.scan(l) },
+      });
   }
 
   /** Delete key: add the node to the cart, or take it out if it's already there. */

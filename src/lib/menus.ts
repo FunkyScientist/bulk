@@ -4,6 +4,7 @@ import ExternalLink from '@lucide/svelte/icons/external-link';
 import Copy from '@lucide/svelte/icons/copy';
 import Focus from '@lucide/svelte/icons/scan';
 import Undo from '@lucide/svelte/icons/undo-2';
+import Trash from '@lucide/svelte/icons/trash-2';
 import { api } from './api';
 import { app, type MenuItem } from './app.svelte';
 
@@ -46,6 +47,17 @@ export async function nodeMenu(e: MouseEvent, letter: string, id: number, extra:
       hint: 'Ctrl E',
       run: () => api.showInExplorer(info.path),
     },
+    ...(info.parent !== null
+      ? [
+          {
+            label: 'Delete…',
+            icon: Trash,
+            hint: 'Shift Del',
+            danger: true,
+            run: () => (app.deleteRequest = { letter, id }),
+          },
+        ]
+      : []),
     {
       label: 'Copy path',
       icon: Copy,
