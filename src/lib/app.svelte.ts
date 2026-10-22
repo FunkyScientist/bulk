@@ -47,6 +47,7 @@ class AppState {
   revealRequest = $state<{ id: number; seq: number } | null>(null);
   visual = $state<'treemap' | 'sunburst'>(readPref('bulk.visual', 'treemap'));
   split = $state(Number(readPref('bulk.split', '0.5')) || 0.5);
+  sidebarCollapsed = $state(readPref<'open' | 'collapsed'>('bulk.sidebar', 'open') === 'collapsed');
 
   drive = $derived(this.drives.find((d) => d.letter === this.current) ?? null);
   resolvedTheme = $derived<'dark' | 'light'>(
@@ -128,6 +129,11 @@ class AppState {
   setVisual(v: 'treemap' | 'sunburst') {
     this.visual = v;
     writePref('bulk.visual', v);
+  }
+
+  toggleSidebar() {
+    this.sidebarCollapsed = !this.sidebarCollapsed;
+    writePref('bulk.sidebar', this.sidebarCollapsed ? 'collapsed' : 'open');
   }
 
   setSplit(v: number) {

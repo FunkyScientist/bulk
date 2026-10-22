@@ -24,9 +24,18 @@
     }
   });
 
+  function onKey(e: KeyboardEvent) {
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      app.toggleSidebar();
+    }
+  }
+
   const drive = $derived(app.drive);
   const scanning = $derived(drive ? app.isScanning(drive.letter) : false);
 </script>
+
+<svelte:window onkeydown={onKey} />
 
 <div class="flex h-full flex-col">
   <TitleBar />
