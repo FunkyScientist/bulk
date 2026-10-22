@@ -131,7 +131,7 @@ pub fn helper_ready(app: &AppHandle) -> bool {
 }
 
 #[derive(Serialize, Clone)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ScanEvent {
     Started {
         method: &'static str,
