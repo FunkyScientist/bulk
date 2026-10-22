@@ -61,7 +61,7 @@
   <button
     class="switch relative h-5 w-9 shrink-0 rounded-full transition-colors {on
       ? 'bg-accent'
-      : 'bg-panel-2'}"
+      : 'bg-[var(--switch-off)]'}"
     role="switch"
     aria-checked={on}
     aria-label={label}

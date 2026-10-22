@@ -38,9 +38,7 @@
     const move = (ev: PointerEvent) => {
       if (!body) return;
       const r = body.getBoundingClientRect();
-      app.setSplit(
-        rows ? (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width,
-      );
+      app.setSplit(rows ? (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width);
     };
     const up = () => {
       dragging = false;
@@ -149,10 +147,7 @@
       bind:this={body}
       in:fade={{ duration: 160 }}
     >
-      <div
-        class="min-h-0 min-w-0"
-        style="{rows ? 'height' : 'width'}: {app.split * 100}%"
-      >
+      <div class="min-h-0 min-w-0" style="{rows ? 'height' : 'width'}: {app.split * 100}%">
         <TreeList letter={drive.letter} />
       </div>
       <div
