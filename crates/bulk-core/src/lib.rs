@@ -2,6 +2,7 @@
 //! back the desktop app, the elevated helper and a future CLI.
 
 pub mod diff;
+pub mod dupes;
 pub mod helper;
 pub mod layout;
 pub mod scan;

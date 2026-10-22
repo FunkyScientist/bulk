@@ -18,6 +18,8 @@
   import HardDrive from '@lucide/svelte/icons/hard-drive';
   import Zap from '@lucide/svelte/icons/zap';
   import Keyboard from '@lucide/svelte/icons/keyboard';
+  import Copy from '@lucide/svelte/icons/copy';
+  import ShoppingCart from '@lucide/svelte/icons/shopping-cart';
   import CornerDownLeft from '@lucide/svelte/icons/corner-down-left';
   import { api, type SearchHit } from '$lib/api';
   import { app } from '$lib/app.svelte';
@@ -77,6 +79,13 @@
       },
       { kind: 'action', label: 'Browse files', icon: FolderTree, run: () => (app.tab = 'browse') },
       { kind: 'action', label: 'What changed', icon: History, run: () => (app.tab = 'changes') },
+      { kind: 'action', label: 'Find duplicates', icon: Copy, run: () => (app.tab = 'duplicates') },
+      {
+        kind: 'action',
+        label: 'Open cleanup cart',
+        icon: ShoppingCart,
+        run: () => (app.cartOpen = true),
+      },
       {
         kind: 'action',
         label: app.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar',

@@ -1,5 +1,6 @@
 mod cart;
 mod commands;
+mod dupes;
 mod history;
 mod live;
 mod scan;
@@ -21,6 +22,7 @@ pub fn run() {
         .manage(state::AppState::default())
         .manage(scan::HelperState::default())
         .manage(cart::CartState::default())
+        .manage(dupes::DupesState::default())
         .manage(settings::SettingsState(std::sync::Mutex::new(
             settings::load(),
         )))
@@ -62,6 +64,8 @@ pub fn run() {
             cart::cart_clear,
             cart::cart_delete,
             cart::cart_undo,
+            dupes::dupes_start,
+            dupes::dupes_cancel,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Bulk");

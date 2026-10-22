@@ -13,10 +13,18 @@
   import DiffView from './DiffView.svelte';
   import FolderTree from '@lucide/svelte/icons/folder-tree';
   import History from '@lucide/svelte/icons/history';
+  import CopyIcon from '@lucide/svelte/icons/copy';
+  import DupesView from './DupesView.svelte';
 
   let { drive }: { drive: Drive } = $props();
   const scan = $derived(app.scans[drive.letter]);
   const scanning = $derived(app.isScanning(drive.letter));
+
+  const tabs = [
+    { k: 'browse', l: 'Browse', I: FolderTree },
+    { k: 'changes', l: 'Changes', I: History },
+    { k: 'duplicates', l: 'Duplicates', I: CopyIcon },
+  ] as const;
 
   let body: HTMLDivElement | undefined = $state();
   let dragging = $state(false);
@@ -66,8 +74,11 @@
 
     <div class="ml-auto flex items-center gap-2">
       <div class="tabs relative flex rounded-lg bg-panel-2 p-0.5 text-[12px]">
-        <span class="thumb" style="transform: translateX({app.tab === 'browse' ? 0 : 100}%)"></span>
-        {#each [{ k: 'browse', l: 'Browse', I: FolderTree }, { k: 'changes', l: 'Changes', I: History }] as const as t (t.k)}
+        <span
+          class="thumb"
+          style="transform: translateX({tabs.findIndex((t) => t.k === app.tab) * 100}%)"
+        ></span>
+        {#each tabs as t (t.k)}
           <button
             class="relative z-10 flex h-6 w-[92px] items-center justify-center gap-1.5 rounded-md transition-colors {app.tab ===
             t.k
@@ -112,7 +123,11 @@
     </div>
   </div>
 
-  {#if app.tab === 'changes'}
+  {#if app.tab === 'duplicates'}
+    <div class="min-h-0 flex-1">
+      <DupesView letter={drive.letter} />
+    </div>
+  {:else if app.tab === 'changes'}
     <div class="min-h-0 flex-1">
       <DiffView letter={drive.letter} method={drive.method} />
     </div>

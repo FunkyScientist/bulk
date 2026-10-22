@@ -216,7 +216,44 @@ export interface UndoResult {
   needsRescan: string[];
 }
 
+export interface DupeFile {
+  id: number;
+  path: string;
+  size: number;
+  mtime: number;
+}
+
+export interface DupeGroup {
+  size: number;
+  files: DupeFile[];
+}
+
+export type DupesEvent =
+  | {
+      type: 'progress';
+      phase: number;
+      filesDone: number;
+      filesTotal: number;
+      bytesDone: number;
+      bytesTotal: number;
+    }
+  | { type: 'done'; groups: DupeGroup[]; elapsedMs: number; candidates: number }
+  | { type: 'error'; message: string }
+  | { type: 'cancelled' };
+
 export const api = {
+  dupesStart(
+    letter: string,
+    root: number | null,
+    minSize: number,
+    skipSystem: boolean,
+    onEvent: (e: DupesEvent) => void,
+  ) {
+    const ch = new Channel<DupesEvent>();
+    ch.onmessage = onEvent;
+    return invoke<void>('dupes_start', { letter, root, minSize, skipSystem, onEvent: ch });
+  },
+  dupesCancel: () => invoke<void>('dupes_cancel'),
   cartGet: () => invoke<CartItem[]>('cart_get'),
   cartAdd: (letter: string, ids: number[]) => invoke<CartItem[]>('cart_add', { letter, ids }),
   cartRemove: (paths: string[]) => invoke<CartItem[]>('cart_remove', { paths }),
