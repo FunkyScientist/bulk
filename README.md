@@ -218,7 +218,7 @@ flowchart LR
     subgraph admin["Runs elevated"]
         Helper["bulk-helper.exe"]
     end
-    App <-- "named pipe<br/>\\.\pipe\bulk-helper-&lt;SID&gt;" --> Helper
+    App <-- "named pipe<br/>(your account only)" --> Helper
     Helper -- "raw reads" --> Disk[("NTFS volume<br/>MFT + USN journal")]
     App -- "folder walk<br/>(fallback, non-NTFS)" --> Disk
     App <--> Snap[("%LOCALAPPDATA%\Bulk<br/>snapshots, settings")]
