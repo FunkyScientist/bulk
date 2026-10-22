@@ -309,5 +309,7 @@ export const api = {
   nodePath: (letter: string, id: number) => invoke<string>('node_path', { letter, id }),
   showInExplorer: (path: string) => invoke<void>('show_in_explorer', { path }),
   openPath: (path: string) => invoke<void>('open_path', { path }),
+  export: (letter: string, root: number | null, format: 'html' | 'csv' | 'json', path: string) =>
+    invoke<void>('export', { letter, root, format, path }),
   backdrop: () => invoke<'mica' | 'solid'>('backdrop'),
 };

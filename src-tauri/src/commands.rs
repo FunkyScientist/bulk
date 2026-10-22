@@ -480,6 +480,62 @@ pub async fn search(
     })
 }
 
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    Html,
+    Csv,
+    Json,
+}
+
+/// Write a report for `root` (or the whole drive) to `path`, chosen by the user in
+/// a save dialog.
+#[tauri::command]
+pub async fn export(
+    state: State<'_, AppState>,
+    letter: char,
+    root: Option<NodeId>,
+    format: ExportFormat,
+    path: std::path::PathBuf,
+) -> Res<()> {
+    // Work on a copy so live updates and the UI aren't blocked while writing.
+    let (tree, root, title) = {
+        let drives = state.drives.lock().unwrap();
+        let d = drives.get(&letter).ok_or("unknown drive")?;
+        let tree = d.tree.as_ref().ok_or("not scanned")?;
+        let root = root
+            .filter(|&r| (r as usize) < tree.len())
+            .unwrap_or(tree.root);
+        let title = if root == tree.root {
+            format!(
+                "{letter}: {}",
+                if d.vol.label.is_empty() {
+                    "Local disk"
+                } else {
+                    &d.vol.label
+                }
+            )
+        } else {
+            tree.name(root).to_string()
+        };
+        (tree.clone(), root, title)
+    };
+    tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<()> {
+        let file = std::fs::File::create(&path)?;
+        match format {
+            ExportFormat::Csv => bulk_core::export::write_csv(&tree, root, file)?,
+            ExportFormat::Json => bulk_core::export::write_json(&tree, root, file)?,
+            ExportFormat::Html => {
+                bulk_core::export::write_html(&tree, root, &title, scan::now() as u32, file)?
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
+}
+
 /// Open a file with its default app.
 #[tauri::command]
 pub fn open_path(path: String) -> Res<()> {

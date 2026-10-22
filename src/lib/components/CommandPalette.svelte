@@ -18,6 +18,7 @@
   import HardDrive from '@lucide/svelte/icons/hard-drive';
   import Zap from '@lucide/svelte/icons/zap';
   import Keyboard from '@lucide/svelte/icons/keyboard';
+  import SettingsIcon from '@lucide/svelte/icons/settings';
   import Copy from '@lucide/svelte/icons/copy';
   import ShoppingCart from '@lucide/svelte/icons/shopping-cart';
   import CornerDownLeft from '@lucide/svelte/icons/corner-down-left';
@@ -25,8 +26,17 @@
   import { app } from '$lib/app.svelte';
   import { ago, bytes, count } from '$lib/format';
 
-  let { open = $bindable(false), onShortcuts }: { open: boolean; onShortcuts: () => void } =
-    $props();
+  let {
+    open = $bindable(false),
+    onShortcuts,
+    onSettings,
+    onRescanDrives,
+  }: {
+    open: boolean;
+    onShortcuts: () => void;
+    onSettings: () => void;
+    onRescanDrives: () => void;
+  } = $props();
 
   type Action = { kind: 'action'; label: string; hint?: string; icon: Component; run: () => void };
   type Item = Action | { kind: 'hit'; hit: SearchHit };
@@ -86,6 +96,8 @@
         icon: ShoppingCart,
         run: () => (app.cartOpen = true),
       },
+      { kind: 'action', label: 'Rescan drives…', icon: RefreshCw, run: onRescanDrives },
+      { kind: 'action', label: 'Settings', icon: SettingsIcon, run: onSettings },
       {
         kind: 'action',
         label: app.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar',

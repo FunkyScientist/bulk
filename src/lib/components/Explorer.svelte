@@ -15,6 +15,8 @@
   import History from '@lucide/svelte/icons/history';
   import CopyIcon from '@lucide/svelte/icons/copy';
   import DupesView from './DupesView.svelte';
+  import Share from '@lucide/svelte/icons/share';
+  import { exportMenu } from '$lib/exporting';
 
   let { drive }: { drive: Drive } = $props();
   const scan = $derived(app.scans[drive.letter]);
@@ -113,6 +115,13 @@
           >
         </span>
       {/if}
+      <button
+        class="pressable flex h-7 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[12px] text-fg-muted hover:border-line-strong hover:text-fg"
+        title="Export the folder shown in the chart"
+        onclick={(e) => exportMenu(e, drive.letter)}
+      >
+        <Share class="size-3.5" /> Export
+      </button>
       <button
         class="pressable flex h-7 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[12px] text-fg-muted hover:border-line-strong hover:text-fg disabled:opacity-50"
         disabled={scanning}

@@ -47,6 +47,9 @@ pub struct TreemapOptions {
     pub header: f32,
     pub pad: f32,
     pub use_alloc: bool,
+    /// Tiles smaller than this (px²) aren't emitted: they're barely visible and
+    /// would otherwise let one folder of tiny files use up the whole budget.
+    pub min_tile_area: f32,
 }
 
 impl Default for TreemapOptions {
@@ -59,6 +62,7 @@ impl Default for TreemapOptions {
             header: 16.0,
             pad: 2.0,
             use_alloc: true,
+            min_tile_area: 6.0,
         }
     }
 }
@@ -144,7 +148,7 @@ pub fn treemap(tree: &Tree, root: NodeId, o: &TreemapOptions) -> Vec<Tile> {
         squarify(&kids, inner, &mut placed);
 
         for &(id, rect) in &placed {
-            if rect.w < 1.0 || rect.h < 1.0 {
+            if rect.w < 1.0 || rect.h < 1.0 || rect.area() < o.min_tile_area {
                 continue;
             }
             let n = tree.get(id);

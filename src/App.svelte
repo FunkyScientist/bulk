@@ -14,10 +14,12 @@
   import Toasts from '$lib/components/Toasts.svelte';
   import CartPanel from '$lib/components/CartPanel.svelte';
   import SettingsDialog from '$lib/components/SettingsDialog.svelte';
+  import RescanDialog from '$lib/components/RescanDialog.svelte';
 
   let palette = $state(false);
   let shortcuts = $state(false);
   let settings = $state(false);
+  let rescan = $state(false);
 
   $effect(() => {
     document.documentElement.dataset.theme = app.resolvedTheme;
@@ -65,8 +67,8 @@
     } else if (e.key === '?') {
       e.preventDefault();
       shortcuts = !shortcuts;
-    } else if (e.key === 'Escape' && (shortcuts || settings || app.cartOpen)) {
-      shortcuts = settings = app.cartOpen = false;
+    } else if (e.key === 'Escape' && (shortcuts || settings || rescan || app.cartOpen)) {
+      shortcuts = settings = rescan = app.cartOpen = false;
     } else if (e.key === 'Delete' && drive && app.selected !== null && app.selected !== 0) {
       e.preventDefault();
       app.addToCart(drive.letter, [app.selected]);
@@ -93,10 +95,7 @@
 <div class="flex h-full flex-col">
   <TitleBar onSearch={() => (palette = true)} />
   <div class="flex min-h-0 flex-1">
-    <Sidebar
-      onRescan={() => drive && app.scan(drive.letter)}
-      onSettings={() => (settings = true)}
-    />
+    <Sidebar onRescan={() => (rescan = true)} onSettings={() => (settings = true)} />
     <main class="min-w-0 flex-1 pr-2.5 pb-2.5">
       <div class="surface relative h-full overflow-hidden rounded-2xl border border-line bg-panel">
         {#if drive}
@@ -115,10 +114,16 @@
   </div>
 </div>
 
-<CommandPalette bind:open={palette} onShortcuts={() => (shortcuts = true)} />
+<CommandPalette
+  bind:open={palette}
+  onShortcuts={() => (shortcuts = true)}
+  onSettings={() => (settings = true)}
+  onRescanDrives={() => (rescan = true)}
+/>
 <Shortcuts bind:open={shortcuts} />
 <CartPanel />
 <SettingsDialog bind:open={settings} />
+<RescanDialog bind:open={rescan} />
 <ContextMenu />
 <Toasts />
 

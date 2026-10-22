@@ -57,6 +57,7 @@ pub fn run() {
             commands::search,
             commands::show_in_explorer,
             commands::open_path,
+            commands::export,
             commands::backdrop,
             commands::app_version,
             history::history,
