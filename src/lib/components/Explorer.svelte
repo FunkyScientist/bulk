@@ -10,18 +10,22 @@
   import { ago, bytes, count, duration } from '$lib/format';
   import TreeList from './TreeList.svelte';
   import VisualPane from './VisualPane.svelte';
+  import DiffView from './DiffView.svelte';
+  import FolderTree from '@lucide/svelte/icons/folder-tree';
+  import History from '@lucide/svelte/icons/history';
 
   let { drive }: { drive: Drive } = $props();
   const scan = $derived(app.scans[drive.letter]);
   const scanning = $derived(app.isScanning(drive.letter));
 
-  let body: HTMLDivElement;
+  let body: HTMLDivElement | undefined = $state();
   let dragging = $state(false);
   function startDrag(e: PointerEvent) {
     dragging = true;
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) => {
+      if (!body) return;
       const r = body.getBoundingClientRect();
       app.setSplit((ev.clientX - r.left) / r.width);
     };
@@ -61,6 +65,21 @@
     {/if}
 
     <div class="ml-auto flex items-center gap-2">
+      <div class="tabs relative flex rounded-lg bg-panel-2 p-0.5 text-[12px]">
+        <span class="thumb" style="transform: translateX({app.tab === 'browse' ? 0 : 100}%)"></span>
+        {#each [{ k: 'browse', l: 'Browse', I: FolderTree }, { k: 'changes', l: 'Changes', I: History }] as const as t (t.k)}
+          <button
+            class="relative z-10 flex h-6 w-[92px] items-center justify-center gap-1.5 rounded-md transition-colors {app.tab ===
+            t.k
+              ? 'text-fg'
+              : 'text-fg-subtle hover:text-fg-muted'}"
+            aria-pressed={app.tab === t.k}
+            onclick={() => (app.tab = t.k)}
+          >
+            <t.I class="size-3.5" />{t.l}
+          </button>
+        {/each}
+      </div>
       {#if scan?.finished}
         <span
           class="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-[11.5px] text-accent"
@@ -93,25 +112,44 @@
     </div>
   </div>
 
-  <div class="flex min-h-0 flex-1" bind:this={body}>
-    <div class="min-w-0" style="width: {app.split * 100}%">
-      <TreeList letter={drive.letter} />
+  {#if app.tab === 'changes'}
+    <div class="min-h-0 flex-1">
+      <DiffView letter={drive.letter} method={drive.method} />
     </div>
-    <div
-      class="splitter"
-      class:dragging
-      role="separator"
-      aria-orientation="vertical"
-      tabindex="-1"
-      onpointerdown={startDrag}
-    ></div>
-    <div class="min-w-0 flex-1">
-      <VisualPane letter={drive.letter} />
+  {:else}
+    <div class="flex min-h-0 flex-1" bind:this={body} in:fade={{ duration: 160 }}>
+      <div class="min-w-0" style="width: {app.split * 100}%">
+        <TreeList letter={drive.letter} />
+      </div>
+      <div
+        class="splitter"
+        class:dragging
+        role="separator"
+        aria-orientation="vertical"
+        tabindex="-1"
+        onpointerdown={startDrag}
+      ></div>
+      <div class="min-w-0 flex-1">
+        <VisualPane letter={drive.letter} />
+      </div>
     </div>
-  </div>
+  {/if}
 </div>
 
 <style>
+  .thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 92px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--panel);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.25),
+      inset 0 0 0 1px var(--line);
+    transition: transform 260ms var(--ease-spring);
+  }
   .live-dot {
     position: relative;
     width: 6px;

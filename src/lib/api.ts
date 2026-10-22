@@ -145,7 +145,44 @@ function decodeTiles(buf: ArrayBuffer): Tiles {
   return t;
 }
 
+export interface HistoryEntry {
+  path: string;
+  taken: number;
+  alloc: number;
+  files: number;
+  method: string;
+}
+
+export interface DiffSummary {
+  taken: number;
+  oldAlloc: number;
+  newAlloc: number;
+  oldFiles: number;
+  newFiles: number;
+  oldRoot: number;
+  newRoot: number;
+}
+
+export interface DiffItem {
+  name: string;
+  oldId: number | null;
+  newId: number | null;
+  dir: boolean;
+  oldAlloc: number;
+  newAlloc: number;
+  delta: number;
+  oldFiles: number;
+  newFiles: number;
+  status: 'added' | 'removed' | 'changed';
+  hasKids: boolean;
+}
+
 export const api = {
+  history: (letter: string) => invoke<HistoryEntry[]>('history', { letter }),
+  diffOpen: (letter: string, path: string) => invoke<DiffSummary>('diff_open', { letter, path }),
+  diffChildren: (letter: string, oldId: number | null, newId: number | null) =>
+    invoke<DiffItem[]>('diff_children', { letter, oldId, newId }),
+  diffClose: (letter: string) => invoke<void>('diff_close', { letter }),
   async treemap(letter: string, root: number | null, width: number, height: number) {
     const buf = await invoke<ArrayBuffer>('treemap', { letter, root, width, height });
     return decodeTiles(buf);

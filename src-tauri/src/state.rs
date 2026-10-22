@@ -33,6 +33,8 @@ pub struct Drive {
     pub dirty: bool,
     /// Set while a watcher keeps this tree live; store `true` to stop it.
     pub watch: Option<Arc<AtomicBool>>,
+    /// Older snapshot loaded for the "what changed" view.
+    pub diff: Option<(Meta, Tree)>,
 }
 
 impl Drive {
@@ -48,6 +50,7 @@ impl Drive {
             index: None,
             dirty: false,
             watch: None,
+            diff: None,
         }
     }
 

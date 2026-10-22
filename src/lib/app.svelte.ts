@@ -47,6 +47,7 @@ class AppState {
   revealRequest = $state<{ id: number; seq: number } | null>(null);
   visual = $state<'treemap' | 'sunburst'>(readPref('bulk.visual', 'treemap'));
   split = $state(Number(readPref('bulk.split', '0.5')) || 0.5);
+  tab = $state<'browse' | 'changes'>('browse');
   sidebarCollapsed = $state(readPref<'open' | 'collapsed'>('bulk.sidebar', 'open') === 'collapsed');
 
   drive = $derived(this.drives.find((d) => d.letter === this.current) ?? null);

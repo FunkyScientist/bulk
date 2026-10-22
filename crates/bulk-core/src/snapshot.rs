@@ -147,14 +147,23 @@ pub fn prune(serial: u32, keep: usize) {
 }
 
 /// Whether `path` is a snapshot file Bulk wrote (guards commands that take a path).
+///
+/// Checked lexically rather than with `canonicalize`, which follows Windows' AppData
+/// redirection for packaged parent apps and then no longer matches `root()`.
 pub fn is_snapshot_path(path: &Path) -> bool {
-    let Ok(p) = path.canonicalize() else {
+    use std::path::Component;
+    if path
+        .components()
+        .any(|c| matches!(c, Component::ParentDir | Component::CurDir))
+    {
         return false;
-    };
-    let Ok(r) = root().canonicalize() else {
-        return false;
-    };
-    p.starts_with(r) && p.extension().is_some_and(|e| e == "bulk")
+    }
+    let p = path.to_string_lossy().to_ascii_lowercase();
+    let r = root().to_string_lossy().to_ascii_lowercase();
+    p.starts_with(&format!("{}\\", r.trim_end_matches('\\')))
+        && path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("bulk"))
 }
 
 #[cfg(test)]
@@ -190,5 +199,16 @@ mod tests {
         assert_eq!(m.journal.unwrap().next, 99);
         assert_eq!(back.get(back.root).size, 42);
         assert!(back.find_path("Q:\\dir\\f").is_some());
+    }
+
+    #[test]
+    fn snapshot_path_check() {
+        let ok = drive_dir(1).join("history").join("5.bulk");
+        assert!(is_snapshot_path(&ok));
+        assert!(!is_snapshot_path(
+            &drive_dir(1).join("..").join("..").join("x.bulk")
+        ));
+        assert!(!is_snapshot_path(Path::new(r"C:\Windows\x.bulk")));
+        assert!(!is_snapshot_path(&drive_dir(1).join("current.txt")));
     }
 }

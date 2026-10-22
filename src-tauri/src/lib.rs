@@ -1,4 +1,5 @@
 mod commands;
+mod history;
 mod live;
 mod scan;
 mod settings;
@@ -47,6 +48,10 @@ pub fn run() {
             commands::node_info,
             commands::show_in_explorer,
             commands::backdrop,
+            history::history,
+            history::diff_open,
+            history::diff_children,
+            history::diff_close,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Bulk");
