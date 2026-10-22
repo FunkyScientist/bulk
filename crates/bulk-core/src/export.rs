@@ -155,6 +155,72 @@ pub fn human(b: u64) -> String {
     }
 }
 
+const REPORT_CSS: &str = r#"
+:root{--bg:#f7f7fa;--card:#fff;--fg:#16161d;--muted:#5f5f70;--subtle:#8c8c9c;--line:rgba(16,16,40,.08);--track:rgba(16,16,40,.06);--folder:rgba(20,20,60,.045);--collapsed:rgba(106,88,245,.16);--accent:#6a58f5;--shadow:0 1px 2px rgba(16,16,40,.04),0 8px 24px -12px rgba(16,16,40,.12)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0f14;--card:#17171e;--fg:#ececf2;--muted:#a3a3b5;--subtle:#6e6e80;--line:rgba(255,255,255,.07);--track:rgba(255,255,255,.06);--folder:rgba(255,255,255,.03);--collapsed:rgba(139,124,255,.2);--accent:#8b7cff;--shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px -16px rgba(0,0,0,.6)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 "Geist",ui-sans-serif,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:"Geist Mono",ui-monospace,Consolas,monospace}
+.num{font-variant-numeric:tabular-nums}
+main{max-width:1200px;margin:0 auto;padding:40px 24px 72px}
+.brand{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;font-weight:500}
+.brand svg{width:18px;height:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-top:28px}
+h1{font-size:34px;line-height:1.1;margin:0;font-weight:600;letter-spacing:-.03em}
+.path{margin-top:8px;color:var(--muted);font-size:12.5px;word-break:break-all}
+.date{color:var(--subtle);font-size:12.5px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:28px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+.stat span{display:block;color:var(--muted);font-size:12.5px}
+.stat b{display:block;margin-top:4px;font-size:26px;font-weight:600;letter-spacing:-.02em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-top:16px;box-shadow:var(--shadow)}
+h2{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:15px;font-weight:600;letter-spacing:-.01em;margin:0 0 14px}
+h2 small{font-size:12px;font-weight:400;color:var(--subtle)}
+.map svg{width:100%;height:auto;display:block;border-radius:10px}
+.map text{font-size:11px;font-family:"Geist",system-ui,sans-serif;pointer-events:none}
+.map .h{fill:var(--muted);font-weight:500}.map .f{fill:rgba(12,12,20,.85);font-weight:500}
+.map rect:hover{stroke:var(--fg);stroke-width:1.5}
+#tip{position:fixed;z-index:9;pointer-events:none;max-width:420px;padding:8px 11px;border-radius:10px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);font-size:12.5px;opacity:0;transition:opacity .1s}
+#tip b{display:block;font-weight:500;word-break:break-all}#tip span{color:var(--muted)}
+.types{display:flex;gap:2px;height:10px;border-radius:6px;overflow:hidden}.types span{display:block;height:100%}
+.legend{list-style:none;padding:0;margin:18px 0 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px 28px}
+.legend li{display:flex;align-items:center;gap:10px;font-size:13px}
+.legend i{width:10px;height:10px;border-radius:3px;flex:none}
+.legend b{margin-left:auto;font-weight:500}.legend em{width:52px;text-align:right;color:var(--subtle);font-style:normal}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:920px){.grid{grid-template-columns:1fr}}
+ol{list-style:none;margin:0;padding:0}
+ol li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:3px 10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+ol li:first-child{border-top:0;padding-top:0}
+.rank{color:var(--subtle);font-size:12px}
+.name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.name i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:7px;vertical-align:1px}
+.size{text-align:right;font-weight:500}
+.where{grid-column:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--subtle);font-size:11.5px}
+.pct{grid-column:3;text-align:right;color:var(--subtle);font-size:11.5px}
+.bar{grid-column:2/4;height:4px;margin-top:3px;border-radius:2px;background:var(--track);overflow:hidden}
+.bar span{display:block;height:100%;border-radius:2px;background:var(--accent)}
+footer{margin-top:36px;display:flex;justify-content:space-between;color:var(--subtle);font-size:12px}
+@media print{body{background:#fff}.card,.stat{box-shadow:none;break-inside:avoid}#tip{display:none}}
+"#;
+
+const REPORT_JS: &str = r#"
+const tip=document.getElementById('tip'),map=document.querySelector('.map svg');
+map.addEventListener('mousemove',e=>{
+  const r=e.target.closest('rect');
+  if(!r){tip.style.opacity=0;return}
+  const b=document.createElement('b'),s=document.createElement('span');
+  b.textContent=r.dataset.p;s.textContent=r.dataset.s;
+  tip.replaceChildren(b,s);
+  const x=Math.min(e.clientX+14,innerWidth-tip.offsetWidth-8);
+  const y=e.clientY+18+tip.offsetHeight>innerHeight?e.clientY-tip.offsetHeight-12:e.clientY+18;
+  tip.style.left=x+'px';tip.style.top=y+'px';tip.style.opacity=1;
+});
+map.addEventListener('mouseleave',()=>tip.style.opacity=0);
+"#;
+
+const LOGO: &str = r##"<svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="208" y="208" width="368" height="608" rx="56" fill="#8b7cff"/><rect x="608" y="208" width="208" height="288" rx="48" fill="#3fd0c9"/><rect x="608" y="528" width="208" height="128" rx="40" fill="#f5b544"/><rect x="608" y="688" width="208" height="128" rx="32" fill="#ff6b8b"/></svg>"##;
+
 /// A single-file HTML report: treemap, largest folders and files, and file types.
 pub fn write_html(
     tree: &Tree,
@@ -186,8 +252,9 @@ pub fn write_html(
             }
         }
     }
+    let folder_count = folders.len() as u64;
     let top = |v: &mut Vec<NodeId>| {
-        let k = v.len().min(40);
+        let k = v.len().min(25);
         if k > 0 {
             v.select_nth_unstable_by(k - 1, |&a, &b| tree.get(b).alloc.cmp(&tree.get(a).alloc));
             v.truncate(k);
@@ -197,8 +264,8 @@ pub fn write_html(
     top(&mut folders);
     top(&mut files);
 
-    // Treemap as SVG; each tile carries a native tooltip.
-    let (tw, th) = (1200.0f32, 640.0f32);
+    // Treemap as SVG; the page script shows each tile's path and size on hover.
+    let (tw, th) = (1200.0f32, 620.0f32);
     let tiles = layout::treemap(
         tree,
         root,
@@ -215,54 +282,62 @@ pub fn write_html(
         let n = tree.get(t.id);
         let dir_open = t.flags & tile_flags::DIR != 0 && t.flags & tile_flags::COLLAPSED == 0;
         let fill = if dir_open {
-            "var(--folder)".to_string()
+            "var(--folder)"
         } else if t.flags & tile_flags::DIR != 0 {
-            "var(--collapsed)".to_string()
+            "var(--collapsed)"
         } else {
-            CATEGORY_COLORS[t.category as usize].to_string()
+            CATEGORY_COLORS[t.category as usize]
         };
-        let label = format!("{} — {}", tree.path(t.id), human(n.alloc));
         let _ = write!(
             svg,
-            r#"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="2" fill="{fill}"><title>{}</title></rect>"#,
+            r#"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="3" fill="{fill}" data-p="{}" data-s="{} · {:.1}%"/>"#,
             t.rect.x + 0.5,
             t.rect.y + 0.5,
             (t.rect.w - 1.0).max(0.5),
             (t.rect.h - 1.0).max(0.5),
-            esc(&label)
+            esc(&tree.path(t.id)),
+            human(n.alloc),
+            n.alloc as f64 / total as f64 * 100.0
         );
-        if t.flags & tile_flags::HEADER != 0 {
-            let max = ((t.rect.w - 10.0) / 6.5).max(0.0) as usize;
+        let class = if t.flags & tile_flags::DIR != 0 { "h" } else { "f" };
+        let (show, dy) = if t.flags & tile_flags::HEADER != 0 {
+            (true, 12.0)
+        } else {
+            (t.rect.w > 60.0 && t.rect.h > 22.0 && !dir_open, 16.0)
+        };
+        if show {
+            let max = ((t.rect.w - 12.0) / 6.5).max(0.0) as usize;
             let name: String = tree.name(t.id).chars().take(max).collect();
             let _ = write!(
                 svg,
-                r#"<text x="{:.1}" y="{:.1}" class="h">{}</text>"#,
-                t.rect.x + 5.0,
-                t.rect.y + 12.0,
-                esc(&name)
-            );
-        } else if t.rect.w > 60.0 && t.rect.h > 22.0 && !dir_open {
-            let max = ((t.rect.w - 10.0) / 6.5) as usize;
-            let name: String = tree.name(t.id).chars().take(max).collect();
-            let _ = write!(
-                svg,
-                r#"<text x="{:.1}" y="{:.1}" class="f">{}</text>"#,
-                t.rect.x + 5.0,
-                t.rect.y + 15.0,
+                r#"<text x="{:.1}" y="{:.1}" class="{class}">{}</text>"#,
+                t.rect.x + 6.0,
+                t.rect.y + dy,
                 esc(&name)
             );
         }
     }
 
-    let rows = |ids: &[NodeId]| {
+    let list = |ids: &[NodeId]| {
         let max = ids.first().map_or(1, |&i| tree.get(i).alloc.max(1));
         let mut s = String::new();
-        for &id in ids {
+        for (rank, &id) in ids.iter().enumerate() {
             let n = tree.get(id);
+            let swatch = if n.is_dir() {
+                String::new()
+            } else {
+                format!(
+                    r#"<i style="background:{}"></i>"#,
+                    CATEGORY_COLORS[category(tree.name(id)) as usize]
+                )
+            };
             let _ = write!(
                 s,
-                r#"<tr><td class="p" title="{p}">{p}</td><td class="b"><span style="width:{w:.1}%"></span></td><td class="n">{size}</td><td class="n">{pct:.1}%</td></tr>"#,
-                p = esc(&tree.path(id)),
+                r#"<li><span class="rank num">{rank}</span><span class="name" title="{path}">{swatch}{name}</span><span class="size num">{size}</span><span class="where mono" title="{path}">{dir}</span><span class="pct num">{pct:.1}%</span><span class="bar"><span style="width:{w:.1}%"></span></span></li>"#,
+                rank = rank + 1,
+                path = esc(&tree.path(id)),
+                name = esc(tree.name(id)),
+                dir = esc(&tree.path(n.parent)),
                 w = n.alloc as f64 / max as f64 * 100.0,
                 size = human(n.alloc),
                 pct = n.alloc as f64 / total as f64 * 100.0
@@ -285,14 +360,14 @@ pub fn write_html(
         let pct = *v as f64 / cat_total as f64 * 100.0;
         let _ = write!(
             bar,
-            r#"<span style="width:{pct:.2}%;background:{}" title="{} {}"></span>"#,
+            r#"<span style="flex:{pct:.3};background:{}" title="{} · {}"></span>"#,
             CATEGORY_COLORS[*c],
             CATEGORY_NAMES[*c],
             human(*v)
         );
         let _ = write!(
             legend,
-            r#"<li><i style="background:{}"></i>{}<b>{}</b><em>{pct:.1}%</em></li>"#,
+            r#"<li><i style="background:{}"></i>{}<b class="num">{}</b><em class="num">{pct:.1}%</em></li>"#,
             CATEGORY_COLORS[*c],
             CATEGORY_NAMES[*c],
             human(*v)
@@ -305,37 +380,34 @@ pub fn write_html(
         r#"<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title} · Bulk report</title>
-<style>
-:root{{--bg:#f6f6f9;--card:#fff;--fg:#17171d;--muted:#5c5c6c;--line:rgba(0,0,0,.08);--folder:rgba(20,20,60,.05);--collapsed:rgba(106,88,245,.18);--accent:#6a58f5}}
-@media (prefers-color-scheme:dark){{:root{{--bg:#111116;--card:#18181f;--fg:#ececf2;--muted:#a1a1b3;--line:rgba(255,255,255,.08);--folder:rgba(255,255,255,.03);--collapsed:rgba(139,124,255,.2);--accent:#8b7cff}}}}
-*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI Variable","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}}
-main{{max-width:1240px;margin:0 auto;padding:32px 20px 64px}}
-h1{{font-size:26px;margin:0;letter-spacing:-.02em}}h2{{font-size:15px;margin:0 0 12px}}
-.sub{{color:var(--muted)}}.card{{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:18px}}
-.stats{{display:flex;gap:28px;flex-wrap:wrap;margin-top:14px}}.stats b{{display:block;font-size:22px;letter-spacing:-.01em}}
-svg{{width:100%;height:auto;display:block;border-radius:10px}}svg text{{font-size:11px;fill:var(--fg);pointer-events:none}}svg .f{{fill:#111}}svg rect:hover{{stroke:var(--fg);stroke-width:1.5}}
-.types{{display:flex;height:12px;border-radius:6px;overflow:hidden}}.types span{{display:block;height:100%}}
-ul{{list-style:none;padding:0;margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 18px}}
-li{{display:flex;align-items:center;gap:8px}}li i{{width:10px;height:10px;border-radius:3px}}li b{{margin-left:auto;font-weight:600}}li em{{color:var(--muted);font-style:normal;width:48px;text-align:right}}
-.grid{{display:grid;grid-template-columns:1fr 1fr;gap:18px}}@media (max-width:900px){{.grid{{grid-template-columns:1fr}}}}
-table{{width:100%;border-collapse:collapse;table-layout:fixed}}td{{padding:5px 0;border-top:1px solid var(--line);white-space:nowrap}}
-td.p{{overflow:hidden;text-overflow:ellipsis;padding-right:10px}}td.b{{width:22%}}td.b span{{display:block;height:6px;border-radius:3px;background:var(--accent)}}
-td.n{{width:72px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}}footer{{margin-top:28px;color:var(--muted);font-size:12px}}
-</style></head><body><main>
-<h1>{title}</h1><div class="sub">{path} · {date}</div>
-<div class="stats"><div><b>{size}</b><span class="sub">on disk</span></div><div><b>{count}</b><span class="sub">files</span></div><div><b>{logical}</b><span class="sub">total size</span></div></div>
-<div class="card"><h2>Map</h2><svg viewBox="0 0 {tw} {th}" role="img" aria-label="Treemap">{svg}</svg><div class="sub" style="margin-top:8px;font-size:12px">Hover any block for its path and size.</div></div>
-<div class="card"><h2>File types</h2><div class="types">{bar}</div><ul>{legend}</ul></div>
-<div class="grid"><div class="card"><h2>Largest folders</h2><table>{folders}</table></div><div class="card"><h2>Largest files</h2><table>{file_rows}</table></div></div>
-<footer>Made with Bulk</footer></main></body></html>"#,
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>{css}</style></head><body><main>
+<div class="brand">{logo}Bulk report</div>
+<header><div><h1>{title}</h1><div class="path mono">{path}</div></div><div class="date num">{date}</div></header>
+<section class="stats">
+<div class="stat"><span>On disk</span><b class="num">{size}</b></div>
+<div class="stat"><span>Total size</span><b class="num">{logical}</b></div>
+<div class="stat"><span>Files</span><b class="num">{count}</b></div>
+<div class="stat"><span>Folders</span><b class="num">{folder_count}</b></div>
+</section>
+<section class="card"><h2>Map <small>Hover a block for its path and size</small></h2><div class="map"><svg viewBox="0 0 {tw} {th}" role="img" aria-label="Treemap">{svg}</svg></div></section>
+<section class="card"><h2>File types</h2><div class="types">{bar}</div><ul class="legend">{legend}</ul></section>
+<div class="grid"><section class="card"><h2>Largest folders</h2><ol>{folders}</ol></section><section class="card"><h2>Largest files</h2><ol>{file_rows}</ol></section></div>
+<footer><span>Made with Bulk</span><span class="num">{date}</span></footer></main>
+<div id="tip"></div><script>{js}</script></body></html>"#,
+        css = REPORT_CSS,
+        js = REPORT_JS,
+        logo = LOGO,
         title = esc(title),
         path = esc(&tree.path(root)),
         date = iso(generated).replace('T', " ").trim_end_matches('Z'),
         size = human(r.alloc),
         count = thousands(r.files as u64),
+        folder_count = thousands(folder_count),
         logical = human(r.size),
-        folders = rows(&folders),
-        file_rows = rows(&files),
+        folders = list(&folders),
+        file_rows = list(&files),
     )?;
     w.flush()
 }
