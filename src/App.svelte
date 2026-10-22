@@ -65,6 +65,11 @@
       e.preventDefault();
       const letter = drive.letter;
       api.nodePath(letter, app.selected).then((p) => api.showInExplorer(p));
+    } else if (ctrl && key === 'c' && drive && app.selected !== null) {
+      // Leave normal copying alone when there's text selected.
+      if (window.getSelection()?.toString()) return;
+      e.preventDefault();
+      void app.copyPath(drive.letter, app.selected);
     } else if (ctrl && key === '1') {
       e.preventDefault();
       app.setVisual('treemap');

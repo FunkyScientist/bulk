@@ -62,6 +62,7 @@ pub fn run() {
             commands::app_version,
             history::history,
             history::diff_open,
+            history::diff_scope,
             history::diff_children,
             history::diff_close,
             cart::cart_get,

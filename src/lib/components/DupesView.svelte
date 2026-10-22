@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
+  import { nodeMenu } from '$lib/menus';
   import { fade, fly, slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import Copy from '@lucide/svelte/icons/copy';
@@ -18,7 +19,9 @@
   ];
   let minSize = $state(1 << 20);
   let skipSystem = $state(true);
-  let inFolder = $state(false);
+  // Start with the folder open in Browse, when there is one.
+  let inFolder = $state(untrack(() => app.focus[letter] ?? null) !== null);
+  let folderName = $state('');
   let running = $state(false);
   let progress = $state<Extract<DupesEvent, { type: 'progress' }> | null>(null);
   let groups = $state<DupeGroup[] | null>(null);
@@ -28,6 +31,11 @@
   let picked = $state<Record<string, boolean>>({});
 
   const focus = $derived(app.focus[letter] ?? null);
+  $effect(() => {
+    const id = focus;
+    if (id === null) folderName = '';
+    else api.nodeInfo(letter, id).then((i) => (folderName = i.name));
+  });
   const wasted = $derived((groups ?? []).reduce((s, g) => s + g.size * (g.files.length - 1), 0));
   const pickedList = $derived(
     (groups ?? []).flatMap((g) =>
@@ -126,7 +134,7 @@
         disabled={running || focus === null}
         class="accent-[var(--accent)]"
       />
-      Only the folder shown in the chart
+      {focus === null ? 'Only the open folder' : `Only ${folderName || 'the open folder'}`}
     </label>
     <div class="ml-auto">
       {#if running}
@@ -233,7 +241,18 @@
             >
           </div>
           {#each g.files as f (f.path)}
-            <label class="flex cursor-default items-center gap-2.5 px-3 py-1.5 hover:bg-hover">
+            <!-- Clicking selects the file (for Ctrl+C etc.); the checkbox stays the main control. -->
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+            <label
+              class="file flex cursor-default items-center gap-2.5 px-3 py-1.5 hover:bg-hover"
+              class:selected={app.selected === f.id}
+              onclick={() => app.selectNode(f.id)}
+              oncontextmenu={(e) => {
+                e.preventDefault();
+                app.selectNode(f.id);
+                nodeMenu(e, letter, f.id);
+              }}
+            >
               <input type="checkbox" bind:checked={picked[f.path]} class="accent-[var(--accent)]" />
               <File class="size-3.5 shrink-0 text-fg-subtle" />
               <span class="min-w-0 flex-1 truncate text-[12px] text-fg-muted" title={f.path}
@@ -267,6 +286,9 @@
 </div>
 
 <style>
+  .file.selected {
+    background: var(--accent-soft);
+  }
   .group-card {
     content-visibility: auto;
     contain-intrinsic-size: auto 120px;

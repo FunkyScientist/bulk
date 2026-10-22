@@ -37,7 +37,10 @@ export async function nodeMenu(e: MouseEvent, letter: string, id: number, extra:
       label: 'Show in chart',
       icon: Focus,
       hint: 'Enter',
-      run: () => app.setFocus(letter, info.parent === null ? null : id),
+      run: () => {
+        app.tab = 'browse';
+        app.setFocus(letter, info.parent === null ? null : id);
+      },
     });
   else items.push({ label: 'Open', icon: ExternalLink, run: () => api.openPath(info.path) });
   items.push(
@@ -61,6 +64,7 @@ export async function nodeMenu(e: MouseEvent, letter: string, id: number, extra:
     {
       label: 'Copy path',
       icon: Copy,
+      hint: 'Ctrl C',
       run: async () => {
         await navigator.clipboard.writeText(info.path);
         app.toast('Path copied');

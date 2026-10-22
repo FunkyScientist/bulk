@@ -52,8 +52,42 @@ pub struct DiffSummary {
     new_alloc: u64,
     old_files: u32,
     new_files: u32,
-    old_root: NodeId,
+    /// The compared folder in the snapshot; `None` if it didn't exist back then.
+    old_root: Option<NodeId>,
     new_root: NodeId,
+    /// Full path of the compared folder.
+    scope: String,
+}
+
+/// Totals for `folder` (the whole drive when `None`) now and in the snapshot. The
+/// snapshot's ids differ from the live tree's, so the folder is matched by path.
+fn summarize(
+    taken: u64,
+    old: &bulk_core::Tree,
+    new: &bulk_core::Tree,
+    folder: Option<NodeId>,
+) -> DiffSummary {
+    let new_root = folder
+        .filter(|&f| (f as usize) < new.len() && new.get(f).is_dir())
+        .unwrap_or(new.root);
+    let scope = new.path(new_root);
+    let old_root = if new_root == new.root {
+        Some(old.root)
+    } else {
+        old.find_path(&scope)
+    };
+    let n = *new.get(new_root);
+    let (old_alloc, old_files) = old_root.map_or((0, 0), |o| (old.get(o).alloc, old.get(o).files));
+    DiffSummary {
+        taken,
+        old_alloc,
+        new_alloc: n.alloc,
+        old_files,
+        new_files: n.files,
+        old_root,
+        new_root,
+        scope,
+    }
 }
 
 /// Load a snapshot to compare against. Only files inside Bulk's snapshot folder
@@ -63,6 +97,7 @@ pub async fn diff_open(
     state: State<'_, AppState>,
     letter: char,
     path: PathBuf,
+    folder: Option<NodeId>,
 ) -> Res<DiffSummary> {
     if !snapshot::is_snapshot_path(&path) {
         return Err("not a Bulk snapshot".into());
@@ -77,18 +112,23 @@ pub async fn diff_open(
     if meta.serial != d.vol.serial {
         return Err("snapshot is from a different drive".into());
     }
-    let (o, n) = (*old.get(old.root), *new.get(new.root));
-    let summary = DiffSummary {
-        taken: meta.taken,
-        old_alloc: o.alloc,
-        new_alloc: n.alloc,
-        old_files: o.files,
-        new_files: n.files,
-        old_root: old.root,
-        new_root: new.root,
-    };
+    let summary = summarize(meta.taken, &old, new, folder);
     d.diff = Some((meta, old));
     Ok(summary)
+}
+
+/// Re-scope the loaded comparison to `folder` (or the whole drive).
+#[tauri::command]
+pub fn diff_scope(
+    state: State<AppState>,
+    letter: char,
+    folder: Option<NodeId>,
+) -> Res<DiffSummary> {
+    let drives = state.drives.lock().unwrap();
+    let d = drives.get(&letter).ok_or("unknown drive")?;
+    let new = d.tree.as_ref().ok_or("not scanned")?;
+    let (meta, old) = d.diff.as_ref().ok_or("no snapshot loaded")?;
+    Ok(summarize(meta.taken, old, new, folder))
 }
 
 #[tauri::command]

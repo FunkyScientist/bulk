@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { Tween } from 'svelte/motion';
@@ -11,6 +11,10 @@
   import TrendingDown from '@lucide/svelte/icons/trending-down';
   import { api, type DiffItem, type DiffSummary, type HistoryEntry } from '$lib/api';
   import { ago, bytes, count, date } from '$lib/format';
+  import { app } from '$lib/app.svelte';
+  import { nodeMenu } from '$lib/menus';
+  import FolderOpen from '@lucide/svelte/icons/folder-open';
+  import HardDrive from '@lucide/svelte/icons/hard-drive';
 
   let { letter, method }: { letter: string; method: string | null } = $props();
 
@@ -25,6 +29,27 @@
   const ROOT = 'root';
 
   const key = (i: DiffItem) => `${i.oldId ?? 'x'}:${i.newId ?? 'x'}`;
+
+  // Start with the folder open in Browse; the whole drive is one click away.
+  const opened = untrack(() => app.focus[letter] ?? null);
+  let scope = $state<number | null>(opened);
+  let openedName = $state('');
+  untrack(() => {
+    if (opened !== null) api.nodeInfo(letter, opened).then((i) => (openedName = i.name));
+  });
+
+  async function setScope(next: number | null) {
+    if (!summary || loading) return;
+    loading = true;
+    try {
+      scope = next;
+      summary = await api.diffScope(letter, next);
+      open = {};
+      kids = { [ROOT]: await api.diffChildren(letter, summary.oldRoot, summary.newRoot) };
+    } finally {
+      loading = false;
+    }
+  }
 
   // Live updates hand us a fresh drive object for the same drive; only a different
   // drive should reload (and reset) the comparison.
@@ -53,7 +78,7 @@
     loading = true;
     error = '';
     try {
-      summary = await api.diffOpen(letter, path);
+      summary = await api.diffOpen(letter, path, scope);
       open = {};
       kids = { [ROOT]: await api.diffChildren(letter, summary.oldRoot, summary.newRoot) };
     } catch (e) {
@@ -168,6 +193,36 @@
               summary.newFiles - summary.oldFiles,
             )}
           </div>
+          <div class="mt-1.5 flex items-center gap-2 text-[12px]">
+            {#if scope !== null}
+              <span
+                class="flex min-w-0 items-center gap-1.5 rounded-md bg-accent-soft px-2 py-0.5 text-fg"
+                title={summary.scope}
+              >
+                <FolderOpen class="size-3.5 shrink-0 text-accent" />
+                <span class="truncate">Only {summary.scope}</span>
+              </span>
+              <button
+                class="pressable shrink-0 rounded-md px-1.5 py-0.5 text-fg-muted hover:bg-hover hover:text-fg"
+                onclick={() => setScope(null)}>Show whole drive</button
+              >
+            {:else}
+              <span class="flex items-center gap-1.5 text-fg-muted">
+                <HardDrive class="size-3.5" /> Whole drive
+              </span>
+              {#if opened !== null}
+                <button
+                  class="pressable rounded-md px-1.5 py-0.5 text-fg-muted hover:bg-hover hover:text-fg"
+                  onclick={() => setScope(opened)}>Only {openedName || 'the open folder'}</button
+                >
+              {/if}
+            {/if}
+          </div>
+          {#if summary.oldRoot === null}
+            <div class="mt-1 text-[11.5px] text-fg-subtle">
+              This folder didn't exist in that snapshot, so everything in it is new.
+            </div>
+          {/if}
           {#if chosenMethod && method && chosenMethod !== method}
             <div class="mt-1 text-[11.5px] text-warn" in:fade>
               That snapshot came from a standard scan, which can't see protected folders, so some
@@ -187,8 +242,19 @@
       {#each rows as { item, depth, max }, i (key(item) + depth)}
         <button
           class="row flex h-8 w-full items-center gap-2 rounded-lg pr-3 text-left"
+          class:selected={item.newId !== null && app.selected === item.newId}
           style="padding-left: {8 + depth * 16}px"
-          onclick={() => toggle(item)}
+          onclick={() => {
+            if (item.newId !== null) app.selectNode(item.newId);
+            toggle(item);
+          }}
+          oncontextmenu={(e) => {
+            e.preventDefault();
+            // Items that are gone now only exist in the snapshot.
+            if (item.newId === null) return;
+            app.selectNode(item.newId);
+            nodeMenu(e, letter, item.newId);
+          }}
           in:fly={{ y: -4, duration: 220, delay: Math.min(i, 12) * 12, easing: cubicOut }}
         >
           <span
@@ -251,6 +317,9 @@
   }
   .row:hover {
     background: var(--hover);
+  }
+  .row.selected {
+    background: var(--accent-soft);
   }
   .chev :global(svg) {
     transition: transform 180ms var(--ease-out-soft);

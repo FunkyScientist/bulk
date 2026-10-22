@@ -238,6 +238,12 @@ class AppState {
     this.cart = await api.cartRemove(paths);
   }
 
+  async copyPath(letter: string, id: number) {
+    const path = await api.nodePath(letter, id);
+    await navigator.clipboard.writeText(path);
+    this.toast('Path copied');
+  }
+
   /** Asks for confirmation before deleting a node (Shift+Del, right-click → Delete). */
   deleteRequest = $state<{ letter: string; id: number } | null>(null);
 

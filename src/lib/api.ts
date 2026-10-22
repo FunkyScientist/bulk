@@ -182,8 +182,10 @@ export interface DiffSummary {
   newAlloc: number;
   oldFiles: number;
   newFiles: number;
-  oldRoot: number;
+  oldRoot: number | null;
   newRoot: number;
+  /** Full path of the compared folder. */
+  scope: string;
 }
 
 export interface DiffItem {
@@ -302,7 +304,10 @@ export const api = {
   search: (query: string, letter?: string) =>
     invoke<SearchResult>('search', { query, letter: letter ?? null }),
   history: (letter: string) => invoke<HistoryEntry[]>('history', { letter }),
-  diffOpen: (letter: string, path: string) => invoke<DiffSummary>('diff_open', { letter, path }),
+  diffOpen: (letter: string, path: string, folder: number | null) =>
+    invoke<DiffSummary>('diff_open', { letter, path, folder }),
+  diffScope: (letter: string, folder: number | null) =>
+    invoke<DiffSummary>('diff_scope', { letter, folder }),
   diffChildren: (letter: string, oldId: number | null, newId: number | null) =>
     invoke<DiffItem[]>('diff_children', { letter, oldId, newId }),
   diffClose: (letter: string) => invoke<void>('diff_close', { letter }),

@@ -13,6 +13,7 @@
         ['Ctrl Shift R', 'Rescan whole drive'],
         ['Ctrl B', 'Collapse sidebar'],
         ['Ctrl E', 'Show selection in Explorer'],
+        ['Ctrl C', 'Copy path of selection'],
         ['Ctrl 1 / 2', 'Treemap / sunburst'],
         ['?', 'This list'],
       ],
