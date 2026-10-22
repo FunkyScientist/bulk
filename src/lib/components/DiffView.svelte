@@ -26,8 +26,12 @@
 
   const key = (i: DiffItem) => `${i.oldId ?? 'x'}:${i.newId ?? 'x'}`;
 
+  // Live updates hand us a fresh drive object for the same drive; only a different
+  // drive should reload (and reset) the comparison.
+  let loadedFor = '';
   $effect(() => {
-    void letter;
+    if (letter === loadedFor) return;
+    loadedFor = letter;
     entries = null;
     api.history(letter).then((h) => {
       entries = h;
