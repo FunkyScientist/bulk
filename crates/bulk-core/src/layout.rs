@@ -26,6 +26,8 @@ pub mod tile_flags {
     pub const HEADER: u8 = 2;
     /// Folder whose contents weren't laid out (too small, or over budget).
     pub const COLLAPSED: u8 = 4;
+    /// Folder where much of the space is in items too small to draw.
+    pub const MANY_SMALL: u8 = 8;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -147,8 +149,10 @@ pub fn treemap(tree: &Tree, root: NodeId, o: &TreemapOptions) -> Vec<Tile> {
         placed.clear();
         squarify(&kids, inner, &mut placed);
 
+        let mut hidden = 0.0f32;
         for &(id, rect) in &placed {
             if rect.w < 1.0 || rect.h < 1.0 || rect.area() < o.min_tile_area {
+                hidden += rect.area();
                 continue;
             }
             let n = tree.get(id);
@@ -185,6 +189,11 @@ pub fn treemap(tree: &Tree, root: NodeId, o: &TreemapOptions) -> Vec<Tile> {
                     inset: true,
                     tile: idx,
                 });
+            }
+        }
+        if hidden > inner.area() * 0.2 {
+            if let Some(t) = tiles.get_mut(p.tile) {
+                t.flags |= tile_flags::MANY_SMALL;
             }
         }
     }

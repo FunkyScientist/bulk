@@ -47,6 +47,8 @@
   });
 </script>
 
+<svelte:window onblur={hide} onwheel={hide} />
+
 <div
   bind:this={trigger}
   class={cls}

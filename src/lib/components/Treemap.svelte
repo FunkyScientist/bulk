@@ -150,6 +150,11 @@
       } else {
         ctx.fillRect(rx, ry, rw, rh);
       }
+      // Lots of files too small to draw: hatch the folder so it doesn't look empty.
+      if (f & TileFlags.MANY_SMALL) {
+        ctx.fillStyle = hatch(ctx, dark);
+        ctx.fill();
+      }
       ctx.globalAlpha = 1;
 
       const label = t.labels.get(t.id[i]);
@@ -183,6 +188,23 @@
         }
       }
     }
+  }
+
+  let hatchCache: { ctx: CanvasRenderingContext2D; dark: boolean; pattern: CanvasPattern } | null =
+    null;
+  function hatch(ctx: CanvasRenderingContext2D, dark: boolean) {
+    if (hatchCache?.ctx === ctx && hatchCache.dark === dark) return hatchCache.pattern;
+    const c = new OffscreenCanvas(6, 6);
+    const g = c.getContext('2d')!;
+    g.strokeStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(20,20,60,0.08)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(0, 6);
+    g.lineTo(6, 0);
+    g.stroke();
+    const pattern = ctx.createPattern(c, 'repeat')!;
+    hatchCache = { ctx, dark, pattern };
+    return pattern;
   }
 
   function ellipsize(s: string, room: number, charW: number) {

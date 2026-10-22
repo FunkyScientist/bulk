@@ -105,6 +105,8 @@ class AppState {
     this.current = drives.find((d) => d.autoScan)?.letter ?? drives[0]?.letter ?? null;
 
     void this.autoScan();
+    // Keep free space and "as of …" times current.
+    setInterval(() => void this.refreshDrives(), 60_000);
   }
 
   private pendingChanged = new Set<string>();
