@@ -1,6 +1,7 @@
-//! Filesystem scanners. `walk` works anywhere without privileges; `mft` reads the
+﻿//! Filesystem scanners. `walk` works anywhere without privileges; `mft` reads the
 //! NTFS master file table directly and needs admin rights.
 
+pub mod mft;
 pub mod walk;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

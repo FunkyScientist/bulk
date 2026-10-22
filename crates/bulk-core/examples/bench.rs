@@ -1,4 +1,4 @@
-//! Time a scan and print a summary.
+﻿//! Time a scan and print a summary.
 //!
 //!     cargo run --release -p bulk-core --example bench -- C: [walk|mft]
 
@@ -20,6 +20,7 @@ fn main() -> anyhow::Result<()> {
     let t0 = Instant::now();
     let tree = match method.as_str() {
         "walk" => scan::walk::walk(&target, vol.cluster as u64, &progress)?,
+        "mft" => scan::mft::scan(letter, &progress)?,
         m => anyhow::bail!("unknown method {m}"),
     };
     let elapsed = t0.elapsed();
