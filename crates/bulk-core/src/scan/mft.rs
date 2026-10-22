@@ -313,109 +313,11 @@ fn parse_chunk(
     for i in 0..count {
         let rec = &mut buf[i * rs..(i + 1) * rs];
         let idx = first_rec + i as u32;
-        if &rec[0..4] != b"FILE" {
+        let Some(r) = parse_record(rec, idx, sector, true, &mut out.text, &mut out.names) else {
             continue;
-        }
-        let rflags = u16le(rec, 22);
-        if rflags & 1 == 0 {
-            continue; // not in use
-        }
-        if !apply_fixup(rec, sector) {
-            continue;
-        }
-        let seq = u16le(rec, 16);
-        let base_ref = u64le(rec, 32);
-        let base = if base_ref & 0xFFFF_FFFF_FFFF == 0 {
-            NONE
-        } else {
-            base_ref as u32
         };
-        let owner = if base == NONE { idx } else { base };
-        let is_dir = rflags & 2 != 0;
-
-        let mut r = Rec {
-            idx,
-            base,
-            seq,
-            flags: if is_dir { flags::DIR } else { 0 },
-            mtime: 0,
-            size: 0,
-            alloc: 0,
-        };
-
-        for a in Attrs::new(rec) {
-            match a.kind {
-                AT_STANDARD_INFORMATION if !a.nonresident => {
-                    let v = a.value();
-                    if v.len() >= 0x24 {
-                        r.mtime = filetime_to_unix(u64le(v, 8));
-                        let attrs = u32le(v, 0x20);
-                        // NTFS keeps extra internal bits here, so only trust the
-                        // plain DOS-style ones.
-                        r.flags |= attr_flags(attrs & 0x0FFF) & !(flags::DIR | flags::OFFLINE);
-                    }
-                }
-                AT_FILE_NAME if !a.nonresident => {
-                    let v = a.value();
-                    if v.len() < 66 {
-                        continue;
-                    }
-                    let parent_ref = u64le(v, 0);
-                    let nlen = v[64] as usize;
-                    let ns = v[65];
-                    if v.len() < 66 + nlen * 2 {
-                        continue;
-                    }
-                    let off = out.text.len() as u32;
-                    let units = (0..nlen).map(|k| u16le(v, 66 + k * 2));
-                    for c in char::decode_utf16(units) {
-                        out.text.push(c.unwrap_or(char::REPLACEMENT_CHARACTER));
-                    }
-                    let len = (out.text.len() as u32 - off).min(u16::MAX as u32) as u16;
-                    out.names.push(Name {
-                        rec: owner,
-                        parent: parent_ref as u32,
-                        parent_seq: (parent_ref >> 48) as u16,
-                        ns,
-                        off,
-                        len,
-                    });
-                }
-                AT_DATA => {
-                    if a.nonresident {
-                        if a.start_vcn() == 0 {
-                            r.size += a.real_size();
-                            r.alloc += a.on_disk_size();
-                        }
-                    } else {
-                        r.size += a.value_len() as u64;
-                    }
-                }
-                AT_REPARSE_POINT => {
-                    r.flags |= flags::REPARSE;
-                    // IO_REPARSE_TAG_CLOUD_*: a OneDrive-style placeholder.
-                    let tag = if a.nonresident {
-                        0
-                    } else {
-                        u32le(a.value(), 0)
-                    };
-                    if tag & 0xFFFF_0FFF == 0x9000_001A {
-                        r.flags |= flags::OFFLINE;
-                    }
-                }
-                AT_END => break,
-                _ => {}
-            }
-        }
-
-        if owner == BADCLUS_RECORD {
-            (r.size, r.alloc) = (0, 0);
-        }
-        if base == NONE {
-            if idx < FIRST_USER_RECORD {
-                r.flags |= flags::META;
-            }
-            if is_dir {
+        if r.base == NONE {
+            if r.flags & flags::DIR != 0 {
                 dirs += 1;
             } else {
                 files += 1;
@@ -428,6 +330,208 @@ fn parse_chunk(
     progress.add(files, dirs, bytes);
     progress.done.fetch_add(count as u64, Ordering::Relaxed);
     out
+}
+
+/// Parse one file record. Names are appended to `text`/`names`. Returns `None` for
+/// unused or damaged records.
+fn parse_record(
+    rec: &mut [u8],
+    idx: u32,
+    sector: usize,
+    fixup: bool,
+    text: &mut String,
+    names: &mut Vec<Name>,
+) -> Option<Rec> {
+    if rec.len() < 48 || &rec[0..4] != b"FILE" {
+        return None;
+    }
+    let rflags = u16le(rec, 22);
+    if rflags & 1 == 0 || (fixup && !apply_fixup(rec, sector)) {
+        return None; // not in use, or torn
+    }
+    let seq = u16le(rec, 16);
+    let base_ref = u64le(rec, 32);
+    let base = if base_ref & 0xFFFF_FFFF_FFFF == 0 {
+        NONE
+    } else {
+        base_ref as u32
+    };
+    let owner = if base == NONE { idx } else { base };
+    let is_dir = rflags & 2 != 0;
+
+    let mut r = Rec {
+        idx,
+        base,
+        seq,
+        flags: if is_dir { flags::DIR } else { 0 },
+        mtime: 0,
+        size: 0,
+        alloc: 0,
+    };
+
+    for a in Attrs::new(rec) {
+        match a.kind {
+            AT_STANDARD_INFORMATION if !a.nonresident => {
+                let v = a.value();
+                if v.len() >= 0x24 {
+                    r.mtime = filetime_to_unix(u64le(v, 8));
+                    let attrs = u32le(v, 0x20);
+                    // NTFS keeps extra internal bits here, so only trust the
+                    // plain DOS-style ones.
+                    r.flags |= attr_flags(attrs & 0x0FFF) & !(flags::DIR | flags::OFFLINE);
+                }
+            }
+            AT_FILE_NAME if !a.nonresident => {
+                let v = a.value();
+                if v.len() < 66 {
+                    continue;
+                }
+                let parent_ref = u64le(v, 0);
+                let nlen = v[64] as usize;
+                let ns = v[65];
+                if v.len() < 66 + nlen * 2 {
+                    continue;
+                }
+                let off = text.len() as u32;
+                let units = (0..nlen).map(|k| u16le(v, 66 + k * 2));
+                for c in char::decode_utf16(units) {
+                    text.push(c.unwrap_or(char::REPLACEMENT_CHARACTER));
+                }
+                let len = (text.len() as u32 - off).min(u16::MAX as u32) as u16;
+                names.push(Name {
+                    rec: owner,
+                    parent: parent_ref as u32,
+                    parent_seq: (parent_ref >> 48) as u16,
+                    ns,
+                    off,
+                    len,
+                });
+            }
+            AT_DATA => {
+                if a.nonresident {
+                    if a.start_vcn() == 0 {
+                        r.size += a.real_size();
+                        r.alloc += a.on_disk_size();
+                    }
+                } else {
+                    r.size += a.value_len() as u64;
+                }
+            }
+            AT_REPARSE_POINT => {
+                r.flags |= flags::REPARSE;
+                // IO_REPARSE_TAG_CLOUD_*: a OneDrive-style placeholder.
+                let tag = if a.nonresident {
+                    0
+                } else {
+                    u32le(a.value(), 0)
+                };
+                if tag & 0xFFFF_0FFF == 0x9000_001A {
+                    r.flags |= flags::OFFLINE;
+                }
+            }
+            AT_END => break,
+            _ => {}
+        }
+    }
+
+    if owner == BADCLUS_RECORD {
+        (r.size, r.alloc) = (0, 0);
+    }
+    if base == NONE && idx < FIRST_USER_RECORD {
+        r.flags |= flags::META;
+    }
+    Some(r)
+}
+
+/// Current state of one file, read straight from its MFT record.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FileState {
+    /// Full reference (sequence << 48 | record).
+    pub frn: u64,
+    pub flags: u16,
+    pub size: u64,
+    pub alloc: u64,
+    pub mtime: u32,
+    /// (parent reference, name) for each hard link, DOS short names dropped.
+    pub names: Vec<(u64, String)>,
+}
+
+impl Volume {
+    pub(crate) fn ioctl(&self, code: u32, input: &[u8], output: &mut [u8]) -> std::io::Result<u32> {
+        let mut ret = 0u32;
+        unsafe {
+            let mut ov: OVERLAPPED = std::mem::zeroed();
+            ov.hEvent = CreateEventW(std::ptr::null(), 1, 0, std::ptr::null());
+            let ok = DeviceIoControl(
+                self.handle,
+                code,
+                input.as_ptr() as *const _,
+                input.len() as u32,
+                output.as_mut_ptr() as *mut _,
+                output.len() as u32,
+                &mut ret,
+                &mut ov,
+            ) != 0
+                || GetOverlappedResult(self.handle, &ov, &mut ret, 1) != 0;
+            let err = std::io::Error::last_os_error();
+            CloseHandle(ov.hEvent);
+            if !ok {
+                return Err(err);
+            }
+        }
+        Ok(ret)
+    }
+
+    /// Read a file's current state by reference. Returns `None` if the record is no
+    /// longer in use or now belongs to a different file.
+    pub fn file_state(&self, frn: u64) -> anyhow::Result<Option<FileState>> {
+        const FSCTL_GET_NTFS_FILE_RECORD: u32 = 0x0009_0068;
+        let mut out = vec![0u8; 12 + self.record_size as usize];
+        self.ioctl(FSCTL_GET_NTFS_FILE_RECORD, &frn.to_le_bytes(), &mut out)?;
+        // Windows returns the nearest in-use record at or below the one asked for.
+        let got = u64le(&out, 0);
+        if got & 0xFFFF_FFFF_FFFF != frn & 0xFFFF_FFFF_FFFF {
+            return Ok(None);
+        }
+        let len = (u32le(&out, 8) as usize).min(out.len() - 12);
+        let rec = &mut out[12..12 + len];
+        let idx = (frn & 0xFFFF_FFFF_FFFF) as u32;
+        // Records from this call may already have their fixups applied; only undo
+        // them if the sector ends still hold the check value.
+        let sector = self.sector as usize;
+        let usa = u16le(rec, 4) as usize;
+        let fixup = rec.len() >= sector
+            && usa + 2 <= rec.len()
+            && rec[sector - 2..sector] == rec[usa..usa + 2];
+        let (mut text, mut names) = (String::new(), Vec::new());
+        let Some(r) = parse_record(rec, idx, sector, fixup, &mut text, &mut names) else {
+            return Ok(None);
+        };
+        if r.base != NONE || r.seq != (frn >> 48) as u16 {
+            return Ok(None);
+        }
+        let has_long = names.iter().any(|n| n.ns != NS_DOS);
+        Ok(Some(FileState {
+            frn,
+            flags: r.flags,
+            size: if r.flags & flags::DIR != 0 { 0 } else { r.size },
+            alloc: if r.flags & flags::DIR != 0 {
+                0
+            } else {
+                r.alloc
+            },
+            mtime: r.mtime,
+            names: names
+                .iter()
+                .filter(|n| !(has_long && n.ns == NS_DOS))
+                .map(|n| {
+                    let parent = ((n.parent_seq as u64) << 48) | n.parent as u64;
+                    let name = text[n.off as usize..n.off as usize + n.len as usize].to_string();
+                    (parent, name)
+                })
+                .collect(),
+        }))
+    }
 }
 
 fn build_tree(results: Vec<Parsed>, total: usize, letter: char) -> Tree {

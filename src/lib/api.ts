@@ -18,6 +18,7 @@ export interface Drive {
   scanned: boolean;
   scannedAt: number | null;
   method: 'mft' | 'walk' | null;
+  live: boolean;
   files: number;
   alloc: number;
 }
@@ -156,6 +157,7 @@ export const api = {
   nodeInfo: (letter: string, id: number) => invoke<NodeInfo>('node_info', { letter, id }),
   ancestors: (letter: string, id: number) => invoke<Crumb[]>('ancestors', { letter, id }),
   drives: () => invoke<Drive[]>('drives'),
+  restored: () => invoke<boolean>('restored'),
   helperStatus: () => invoke<HelperStatus>('helper_status'),
   enableFastScan: () => invoke<HelperStatus>('enable_fast_scan'),
   scan(letter: string, onEvent: (e: ScanEvent) => void) {

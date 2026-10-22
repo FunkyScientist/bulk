@@ -48,8 +48,17 @@
       {#if drive.method === 'mft'}<span class="mx-1">·</span><Zap
           class="inline size-3 -translate-y-px text-accent"
         /> Turbo{/if}
-      <span class="mx-1">·</span>scanned {ago(drive.scannedAt ?? 0)}
+      {#if !drive.live}<span class="mx-1">·</span>as of {ago(drive.scannedAt ?? 0)}{/if}
     </div>
+    {#if drive.live}
+      <span
+        class="flex items-center gap-1.5 rounded-full bg-[color-mix(in_oklab,var(--ok)_14%,transparent)] px-2 py-0.5 text-[11px] font-medium text-ok"
+        title="Kept up to date as files change"
+        in:fade={{ duration: 200 }}
+      >
+        <span class="live-dot"></span> Live
+      </span>
+    {/if}
 
     <div class="ml-auto flex items-center gap-2">
       {#if scan?.finished}
@@ -103,6 +112,28 @@
 </div>
 
 <style>
+  .live-dot {
+    position: relative;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ok);
+  }
+  .live-dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--ok);
+    animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  @keyframes ping {
+    75%,
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
+  }
   .splitter {
     position: relative;
     width: 1px;

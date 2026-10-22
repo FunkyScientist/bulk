@@ -5,7 +5,7 @@ use bulk_core::tree::{NodeId, SortKey, Tree};
 use bulk_core::volume::{DriveKind, Volume};
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::scan::{self, HelperState, HelperStatus, ScanEvent};
 use crate::state::{AppState, Row, row};
@@ -21,6 +21,8 @@ fn err(e: impl std::fmt::Display) -> String {
 pub struct DriveSummary {
     #[serde(flatten)]
     vol: Volume,
+    /// Kept current from the change journal.
+    live: bool,
     auto_scan: bool,
     scanning: bool,
     scanned: bool,
@@ -45,6 +47,7 @@ pub fn drives(app: AppHandle, state: State<AppState>) -> Vec<DriveSummary> {
                 scanned: d.tree.is_some(),
                 scanned_at: d.scanned_at,
                 method: d.method,
+                live: d.watch.is_some(),
                 files: root.map_or(0, |r| r.files),
                 alloc: root.map_or(0, |r| r.alloc),
             }
@@ -78,9 +81,14 @@ pub async fn enable_fast_scan(app: AppHandle) -> Res<HelperStatus> {
     .await
     .map_err(err)?
     .map_or(HelperStatus::Outdated, |_| HelperStatus::Ready);
-    *app.state::<HelperState>().status.lock().unwrap() = status;
-    let _ = app.emit("helper-status", status);
+    scan::set_helper_status(&app, status);
     Ok(status)
+}
+
+/// Whether startup snapshot loading has finished.
+#[tauri::command]
+pub fn restored(state: State<AppState>) -> bool {
+    state.restored.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 #[tauri::command]

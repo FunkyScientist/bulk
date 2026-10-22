@@ -1,16 +1,21 @@
 //! Per-drive state: the scanned tree plus the tree-list view built over it.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use bulk_core::scan::Progress;
+use bulk_core::snapshot::Meta;
 use bulk_core::tree::{NodeId, SortKey, Tree, flags};
+use bulk_core::usn::{FrnIndex, Journal};
 use bulk_core::volume::Volume;
 use serde::Serialize;
 
 #[derive(Default)]
 pub struct AppState {
     pub drives: Mutex<HashMap<char, Drive>>,
+    /// Set once saved snapshots have been loaded at startup.
+    pub restored: AtomicBool,
 }
 
 pub struct Drive {
@@ -20,6 +25,14 @@ pub struct Drive {
     pub method: Option<&'static str>,
     pub scan: Option<Arc<Progress>>,
     pub view: View,
+    /// Journal position the tree is current to.
+    pub journal: Option<Journal>,
+    /// Built on first use for applying journal changes.
+    pub index: Option<FrnIndex>,
+    /// Changed since `current.bulk` was last written.
+    pub dirty: bool,
+    /// Set while a watcher keeps this tree live; store `true` to stop it.
+    pub watch: Option<Arc<AtomicBool>>,
 }
 
 impl Drive {
@@ -31,7 +44,33 @@ impl Drive {
             method: None,
             scan: None,
             view: View::default(),
+            journal: None,
+            index: None,
+            dirty: false,
+            watch: None,
         }
+    }
+
+    pub fn stop_watch(&mut self) {
+        if let Some(stop) = self.watch.take() {
+            stop.store(true, Ordering::Relaxed);
+        }
+    }
+
+    pub fn meta(&self) -> Option<Meta> {
+        let tree = self.tree.as_ref()?;
+        let root = tree.get(tree.root);
+        Some(Meta {
+            letter: self.vol.letter,
+            serial: self.vol.serial,
+            label: self.vol.label.clone(),
+            taken: self.scanned_at.unwrap_or(0),
+            method: self.method.unwrap_or("walk").to_string(),
+            files: root.files,
+            alloc: root.alloc,
+            size: root.size,
+            journal: self.journal,
+        })
     }
 }
 

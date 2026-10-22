@@ -23,9 +23,10 @@ use windows_sys::Win32::Security::{GetTokenInformation, TOKEN_QUERY, TOKEN_USER,
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 use crate::tree::Tree;
+use crate::usn::{Change, Journal};
 use crate::wire;
 
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 pub const TASK_NAME: &str = r"Bulk\Helper";
 pub const FRAME_EVENT: u8 = 0;
 pub const FRAME_TREE: u8 = 1;
@@ -38,9 +39,24 @@ const MAX_EVENT: u32 = 16 << 20;
 #[serde(tag = "op", rename_all = "camelCase")]
 pub enum Request {
     Hello,
-    /// Full MFT scan of a drive. Answered with progress events, a tree frame, `Done`.
+    /// Full MFT scan of a drive. Answered with `Journal`, progress events, a tree
+    /// frame, then `Done`.
     Scan {
         letter: char,
+    },
+    /// Everything that changed since `from`, as `Changes` batches, then `Done`.
+    /// `Gap` if the journal no longer goes back that far.
+    Changes {
+        letter: char,
+        journal: u64,
+        from: i64,
+    },
+    /// Like `Changes`, but keeps the connection open and sends new batches as
+    /// files change (an empty batch every couple of seconds as a heartbeat).
+    Watch {
+        letter: char,
+        journal: u64,
+        from: i64,
     },
 }
 
@@ -53,12 +69,26 @@ pub enum Event {
         exe: String,
     },
     Progress(ProgressInfo),
+    /// Journal position at the start of a scan.
+    Journal(Journal),
+    Changes {
+        changes: Vec<Change>,
+        next: i64,
+    },
+    Gap,
     Error {
         message: String,
     },
     Done {
         elapsed_ms: u64,
     },
+}
+
+/// Outcome of a journal catch-up.
+pub enum CatchUp {
+    Changes(Vec<Change>, i64),
+    /// The journal can't cover the gap; rescan instead.
+    Gap,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
@@ -222,10 +252,10 @@ impl Client {
         &self,
         letter: char,
         mut on_progress: impl FnMut(ProgressInfo) -> bool,
-    ) -> anyhow::Result<Tree> {
+    ) -> anyhow::Result<(Tree, Option<Journal>)> {
         let mut c = self.connect()?;
         write_json(&mut c, &Request::Scan { letter })?;
-        let mut tree = None;
+        let (mut tree, mut journal) = (None, None);
         loop {
             let (kind, len) = read_frame_header(&mut c)?;
             if kind == FRAME_TREE {
@@ -234,22 +264,88 @@ impl Client {
                 tree = Some(wire::read_tree(&mut body)?);
                 continue;
             }
-            anyhow::ensure!(len <= MAX_EVENT, "frame too large");
-            let mut body = vec![0u8; len as usize];
-            c.read_exact(&mut body)?;
-            match serde_json::from_slice::<Event>(&body)? {
+            match read_event(&mut c, len)? {
                 Event::Progress(p) => {
                     if !on_progress(p) {
                         anyhow::bail!("scan cancelled");
                     }
                 }
+                Event::Journal(j) => journal = Some(j),
                 Event::Error { message } => anyhow::bail!(message),
                 Event::Done { .. } => break,
-                Event::Hello { .. } => {}
+                _ => {}
             }
         }
-        tree.ok_or_else(|| anyhow::anyhow!("helper returned no tree"))
+        let tree = tree.ok_or_else(|| anyhow::anyhow!("helper returned no tree"))?;
+        Ok((tree, journal))
     }
+
+    /// Changes since `from` in one go.
+    pub fn changes(&self, letter: char, journal: u64, from: i64) -> anyhow::Result<CatchUp> {
+        let mut c = self.connect()?;
+        write_json(
+            &mut c,
+            &Request::Changes {
+                letter,
+                journal,
+                from,
+            },
+        )?;
+        let (mut all, mut next) = (Vec::new(), from);
+        loop {
+            let (_, len) = read_frame_header(&mut c)?;
+            match read_event(&mut c, len)? {
+                Event::Changes { changes, next: n } => {
+                    all.extend(changes);
+                    next = n;
+                }
+                Event::Gap => return Ok(CatchUp::Gap),
+                Event::Error { message } => anyhow::bail!(message),
+                Event::Done { .. } => return Ok(CatchUp::Changes(all, next)),
+                _ => {}
+            }
+        }
+    }
+
+    /// Stream changes as they happen until `on_batch` returns false or the helper
+    /// goes away. Returns `Ok(CatchUp::Gap)` if the journal was reset.
+    pub fn watch(
+        &self,
+        letter: char,
+        journal: u64,
+        from: i64,
+        mut on_batch: impl FnMut(Vec<Change>, i64) -> bool,
+    ) -> anyhow::Result<CatchUp> {
+        let mut c = self.connect()?;
+        write_json(
+            &mut c,
+            &Request::Watch {
+                letter,
+                journal,
+                from,
+            },
+        )?;
+        loop {
+            let (_, len) = read_frame_header(&mut c)?;
+            match read_event(&mut c, len)? {
+                Event::Changes { changes, next } => {
+                    if !on_batch(changes, next) {
+                        return Ok(CatchUp::Changes(Vec::new(), next));
+                    }
+                }
+                Event::Gap => return Ok(CatchUp::Gap),
+                Event::Error { message } => anyhow::bail!(message),
+                _ => {}
+            }
+        }
+    }
+}
+
+fn read_event(c: &mut File, len: u32) -> anyhow::Result<Event> {
+    anyhow::ensure!(len <= MAX_EVENT, "frame too large");
+    let mut body = vec![0u8; len as usize];
+    c.read_exact(&mut body)?;
+    Ok(serde_json::from_slice(&body)?)
 }
 
 /// Start the helper's scheduled task. No prompt once the task exists.

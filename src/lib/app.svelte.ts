@@ -59,6 +59,10 @@ class AppState {
     mq.addEventListener('change', (e) => (this.systemDark = e.matches));
 
     await listen<HelperStatus>('helper-status', (e) => (this.helper = e.payload));
+    await listen<string>('drive-updated', (e) => this.driveChanged(e.payload));
+    await listen<string>('drive-live', (e) => this.driveChanged(e.payload));
+    // The change journal couldn't cover the gap since the last snapshot.
+    await listen<string>('needs-rescan', (e) => void this.scan(e.payload));
     const [drives, helper] = await Promise.all([api.drives(), api.helperStatus()]);
     this.drives = drives;
     if (this.helper === 'checking') this.helper = helper;
@@ -67,12 +71,31 @@ class AppState {
     void this.autoScan();
   }
 
-  /** Scan every local drive once the helper check settles (fast path if available). */
+  private pendingChanged = new Set<string>();
+  private changeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Coalesce bursts of backend updates (live file changes) into one UI refresh. */
+  private driveChanged(letter: string) {
+    this.pendingChanged.add(letter);
+    if (this.changeTimer) return;
+    this.changeTimer = setTimeout(async () => {
+      this.changeTimer = undefined;
+      const letters = [...this.pendingChanged];
+      this.pendingChanged.clear();
+      await this.refreshDrives();
+      if (this.current && letters.includes(this.current) && !this.isScanning(this.current))
+        this.rowsVersion++;
+    }, 600);
+  }
+
+  /** Scan local drives that have no saved snapshot, once startup settles. */
   private async autoScan() {
     const deadline = Date.now() + 5000;
-    while (this.helper === 'checking' && Date.now() < deadline) {
+    while ((this.helper === 'checking' || !(await api.restored())) && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 50));
     }
+    await this.refreshDrives();
+    if (this.current) this.rowsVersion++;
     // Without the fast path a full walk is slow, so start with the selected drive only.
     const targets =
       this.helper === 'ready'

@@ -7,6 +7,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use bulk_core::helper::{self, Client, Event, ProgressInfo};
 use bulk_core::scan::{Progress, walk};
+use bulk_core::snapshot;
+use bulk_core::usn::Journal;
 use bulk_core::volume;
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -65,9 +67,28 @@ pub fn refresh_drives(app: &AppHandle) {
 pub fn check_helper(app: AppHandle) {
     std::thread::spawn(move || {
         let status = probe_helper();
-        *app.state::<HelperState>().status.lock().unwrap() = status;
-        let _ = app.emit("helper-status", status);
+        set_helper_status(&app, status);
     });
+}
+
+/// Record the helper status; once it's ready, restored drives can go live.
+pub fn set_helper_status(app: &AppHandle, status: HelperStatus) {
+    *app.state::<HelperState>().status.lock().unwrap() = status;
+    let _ = app.emit("helper-status", status);
+    if status == HelperStatus::Ready {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            // Restoring may still be in flight; wait for it so its journals are known.
+            let state = app.state::<AppState>();
+            while !state.restored.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(30));
+            }
+            let letters: Vec<char> = state.drives.lock().unwrap().keys().copied().collect();
+            for l in letters {
+                crate::live::start(&app, l);
+            }
+        });
+    }
 }
 
 fn probe_helper() -> HelperStatus {
@@ -122,6 +143,7 @@ pub fn start(app: AppHandle, letter: char, channel: Channel<ScanEvent>) -> Resul
         if d.scan.is_some() {
             return Err("already scanning".into());
         }
+        d.stop_watch();
         let p = Arc::new(Progress::default());
         d.scan = Some(p.clone());
         (d.vol.clone(), p)
@@ -146,17 +168,29 @@ pub fn start(app: AppHandle, letter: char, channel: Channel<ScanEvent>) -> Resul
         };
         d.scan = None;
         match result {
-            Ok(tree) => {
+            Ok((tree, journal)) => {
                 let root = *tree.get(tree.root);
                 d.view.reset(&tree);
                 d.tree = Some(tree);
                 d.method = Some(method);
                 d.scanned_at = Some(now());
+                d.journal = journal;
+                d.index = None;
+                d.dirty = false;
+                let saved = d.meta().zip(d.tree.as_ref().map(|t| t.compact()));
+                drop(drives);
                 let _ = channel.send(ScanEvent::Done {
                     elapsed_ms: t0.elapsed().as_millis() as u64,
                     files: root.files,
                     alloc: root.alloc,
                 });
+                // Keep the result for instant reopening and for "what changed".
+                if let Some((meta, tree)) = saved {
+                    let _ = snapshot::save_current(&meta, &tree);
+                    let _ =
+                        snapshot::save_history(&meta, &tree, crate::settings::history_keep(&app));
+                }
+                crate::live::start(&app, letter);
             }
             Err(_) if progress.cancelled() => {
                 let _ = channel.send(ScanEvent::Cancelled);
@@ -175,7 +209,7 @@ fn scan_via_helper(
     letter: char,
     progress: &Progress,
     channel: &Channel<ScanEvent>,
-) -> anyhow::Result<bulk_core::Tree> {
+) -> anyhow::Result<(bulk_core::Tree, Option<Journal>)> {
     Client::new()?.scan(letter, |p| {
         let _ = channel.send(ScanEvent::Progress(p));
         !progress.cancelled()
@@ -187,7 +221,7 @@ fn scan_via_walk(
     cluster: u64,
     progress: &Arc<Progress>,
     channel: &Channel<ScanEvent>,
-) -> anyhow::Result<bulk_core::Tree> {
+) -> anyhow::Result<(bulk_core::Tree, Option<Journal>)> {
     let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let ticker = {
         let (p, done, ch) = (progress.clone(), done.clone(), channel.clone());
@@ -201,7 +235,7 @@ fn scan_via_walk(
     let r = walk::walk(root, cluster, progress);
     done.store(true, Ordering::Relaxed);
     let _ = ticker.join();
-    r
+    Ok((r?, None))
 }
 
 pub fn now() -> u64 {

@@ -26,7 +26,8 @@
     const s = app.scans[d.letter];
     if (s?.error) return 'Scan failed';
     if (s && !s.finished) return `Scanning · ${count(s.progress.files)} files`;
-    if (d.scanned) return `${count(d.files)} files · ${ago(d.scannedAt ?? 0)}`;
+    if (d.scanned && d.live) return `${count(d.files)} files · live`;
+    if (d.scanned) return `${count(d.files)} files · as of ${ago(d.scannedAt ?? 0)}`;
     if (!d.autoScan)
       return d.kind === 'virtual' ? 'Cloud drive · scan on demand' : 'Scan on demand';
     return 'Not scanned yet';

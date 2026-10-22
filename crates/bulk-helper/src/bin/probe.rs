@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
 
     let t1 = Instant::now();
     let mut last = 0;
-    let tree = client.scan(letter, |p| {
+    let (tree, _) = client.scan(letter, |p| {
         if p.files / 250_000 != last {
             last = p.files / 250_000;
             println!("  {:>5.2}s  {} files", t1.elapsed().as_secs_f64(), p.files);

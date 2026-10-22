@@ -24,6 +24,7 @@ use bulk_core::helper::{
     write_frame_header, write_json,
 };
 use bulk_core::scan::{self, Progress};
+use bulk_core::usn;
 use windows_sys::Win32::Foundation::{
     CloseHandle, ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE, LocalFree,
 };
@@ -105,6 +106,12 @@ fn install(user: Option<String>) -> anyhow::Result<()> {
         "schtasks failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
+    // An older helper may still own the pipe; stop it so the new one takes over.
+    let _ = Command::new("taskkill")
+        .args(["/F", "/IM", "bulk-helper.exe", "/FI"])
+        .arg(format!("PID ne {}", std::process::id()))
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
     Ok(())
 }
 
@@ -330,11 +337,21 @@ fn handle(mut conn: File, raw: isize) -> anyhow::Result<()> {
             },
         )?,
         Request::Scan { letter } => scan_drive(&mut conn, letter)?,
+        Request::Changes {
+            letter,
+            journal,
+            from,
+        } => send_changes(&mut conn, letter, journal, from, false)?,
+        Request::Watch {
+            letter,
+            journal,
+            from,
+        } => send_changes(&mut conn, letter, journal, from, true)?,
     }
     Ok(())
 }
 
-fn scan_drive(conn: &mut File, letter: char) -> anyhow::Result<()> {
+fn open_volume(conn: &mut File, letter: char) -> anyhow::Result<Option<scan::mft::Volume>> {
     if !letter.is_ascii_alphabetic() {
         write_json(
             conn,
@@ -342,7 +359,99 @@ fn scan_drive(conn: &mut File, letter: char) -> anyhow::Result<()> {
                 message: "bad drive letter".into(),
             },
         )?;
+        return Ok(None);
+    }
+    match scan::mft::Volume::open(letter) {
+        Ok(v) => Ok(Some(v)),
+        Err(e) => {
+            write_json(
+                conn,
+                &Event::Error {
+                    message: format!("{e:#}"),
+                },
+            )?;
+            Ok(None)
+        }
+    }
+}
+
+/// Batches stay well under the pipe's JSON frame limit.
+const CHANGE_BATCH: usize = 4000;
+
+fn send_changes(
+    conn: &mut File,
+    letter: char,
+    journal: u64,
+    from: i64,
+    watch: bool,
+) -> anyhow::Result<()> {
+    let Some(vol) = open_volume(conn, letter)? else {
         return Ok(());
+    };
+    let start = Instant::now();
+    let mut next = from;
+    loop {
+        let wait = watch.then_some(Duration::from_secs(2));
+        let (frns, n) = match usn::changed_since(&vol, journal, next, wait) {
+            Ok(r) => r,
+            Err(usn::JournalError::Gap) => {
+                write_json(conn, &Event::Gap)?;
+                return Ok(());
+            }
+            Err(e) => {
+                write_json(
+                    conn,
+                    &Event::Error {
+                        message: e.to_string(),
+                    },
+                )?;
+                return Ok(());
+            }
+        };
+        next = n;
+        if frns.is_empty() {
+            // Heartbeat while watching; a failed write means the app is gone.
+            if watch {
+                write_json(
+                    conn,
+                    &Event::Changes {
+                        changes: Vec::new(),
+                        next,
+                    },
+                )?;
+            }
+        }
+        for chunk in frns.chunks(CHANGE_BATCH) {
+            write_json(
+                conn,
+                &Event::Changes {
+                    changes: usn::states(&vol, chunk),
+                    next,
+                },
+            )?;
+        }
+        if !watch {
+            break;
+        }
+        // Let bursts (copies, installs) settle into fewer, larger batches.
+        std::thread::sleep(Duration::from_millis(400));
+    }
+    write_json(
+        conn,
+        &Event::Done {
+            elapsed_ms: start.elapsed().as_millis() as u64,
+        },
+    )?;
+    Ok(())
+}
+
+fn scan_drive(conn: &mut File, letter: char) -> anyhow::Result<()> {
+    let Some(vol) = open_volume(conn, letter)? else {
+        return Ok(());
+    };
+    // Note the journal position first, so nothing that changes mid-scan is missed.
+    if let Ok(j) = usn::query(&vol) {
+        write_json(conn, &Event::Journal(j))?;
     }
     let start = Instant::now();
     let progress = Arc::new(Progress::default());
@@ -350,7 +459,7 @@ fn scan_drive(conn: &mut File, letter: char) -> anyhow::Result<()> {
     {
         let p = progress.clone();
         std::thread::spawn(move || {
-            let _ = tx.send(scan::mft::scan(letter, &p));
+            let _ = tx.send(scan::mft::scan_volume(&vol, letter, &p));
         });
     }
 
