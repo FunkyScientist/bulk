@@ -33,17 +33,13 @@
     }
   }
 
-  async function turbo(on: boolean) {
+  async function allow() {
     busy = true;
-    try {
-      if (on) await app.enableFastScan();
-      else app.helper = await api.removeFastScan();
-    } catch {
-      // Declined at the Windows prompt.
-    } finally {
-      busy = false;
-    }
+    await app.allowFastMode();
+    busy = false;
   }
+
+  const needsPermission = $derived(app.helper === 'notInstalled' || app.helper === 'outdated');
 
   const themes: { k: ThemePref; l: string }[] = [
     { k: 'system', l: 'System' },
@@ -57,7 +53,7 @@
   const keeps = [7, 14, 30, 60, 90];
 </script>
 
-{#snippet toggle(on: boolean, onchange: (v: boolean) => void, label: string)}
+{#snippet toggle(on: boolean, onchange: (v: boolean) => void, label: string, disabled = false)}
   <button
     class="switch relative h-5 w-9 shrink-0 rounded-full transition-colors {on
       ? 'bg-accent'
@@ -65,6 +61,7 @@
     role="switch"
     aria-checked={on}
     aria-label={label}
+    {disabled}
     onclick={() => onchange(!on)}
   >
     <span class="knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white" class:on></span>
@@ -137,43 +134,53 @@
         </div>
       </section>
 
-      <section>
-        <h3 class="section">Turbo scan</h3>
-        <div class="row">
-          <div>
-            <div class="flex items-center gap-1.5">
-              <Zap class="size-3.5 text-accent" /> Read drives directly
-            </div>
-            <div class="sub">
-              {app.helper === 'ready'
-                ? 'On. NTFS drives scan in seconds and stay up to date live.'
-                : 'Off. Scans walk folders one by one, which is much slower.'}
-            </div>
-          </div>
-          <button
-            class="pressable h-7 shrink-0 rounded-lg border border-line px-3 text-[12px] hover:border-line-strong disabled:opacity-50"
-            disabled={busy}
-            onclick={() => turbo(app.helper !== 'ready')}
-          >
-            {busy ? 'Waiting for Windows…' : app.helper === 'ready' ? 'Turn off' : 'Turn on'}
-          </button>
-        </div>
-      </section>
-
       {#if s}
         <section>
-          <h3 class="section">Snapshots</h3>
+          <h3 class="section">Scanning</h3>
           <div class="row">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <Zap class="size-3.5 text-accent" /> Fast mode
+              </div>
+              <div class="sub">
+                {#if !s.fastMode}
+                  Off. Scans walk folders one by one, and drives don't update live.
+                {:else if needsPermission}
+                  Needs Windows' permission to read drives directly.
+                {:else}
+                  Reads drives directly: scans take seconds and stay up to date live.
+                {/if}
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              {#if s.fastMode && needsPermission}
+                <button
+                  class="pressable h-7 shrink-0 rounded-lg border border-line px-3 text-[12px] hover:border-line-strong disabled:opacity-50"
+                  disabled={busy}
+                  onclick={allow}>{busy ? 'Waiting for Windows…' : 'Allow'}</button
+                >
+              {/if}
+              {@render toggle(s.fastMode, (v) => save({ fastMode: v }), 'Fast mode')}
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h3 class="section">Snapshots</h3>
+          <div class="row" class:opacity-50={!s.autoSnapshots && app.helper !== 'ready'}>
             <div>
               <div>Automatic snapshots</div>
               <div class="sub">
-                Saved in the background, even when Bulk is closed (needs Turbo scan).
+                {app.helper === 'ready' || s.autoSnapshots
+                  ? 'Saved in the background, even when Bulk is closed.'
+                  : 'Needs fast mode.'}
               </div>
             </div>
             {@render toggle(
               s.autoSnapshots,
               (v) => save({ autoSnapshots: v }),
               'Automatic snapshots',
+              !s.autoSnapshots && app.helper !== 'ready',
             )}
           </div>
           <div class="row" class:opacity-50={!s.autoSnapshots}>

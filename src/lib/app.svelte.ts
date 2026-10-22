@@ -402,9 +402,10 @@ class AppState {
     await api.cancelScan(letter);
   }
 
-  async enableFastScan(): Promise<boolean> {
+  /** Ask Windows again for the helper's permission, after it was declined. */
+  async allowFastMode(): Promise<boolean> {
     try {
-      this.helper = await api.enableFastScan();
+      this.helper = await api.allowFastMode();
       return this.helper === 'ready';
     } catch {
       return false;

@@ -113,9 +113,9 @@
     if (app.helper === 'notInstalled' || app.helper === 'outdated')
       out.push({
         kind: 'action',
-        label: 'Turn on Turbo scan',
+        label: 'Allow fast mode',
         icon: Zap,
-        run: () => app.enableFastScan(),
+        run: () => app.allowFastMode(),
       });
     for (const drv of app.drives)
       out.push({

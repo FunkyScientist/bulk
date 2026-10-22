@@ -26,7 +26,7 @@ use crate::tree::Tree;
 use crate::usn::{Change, Journal};
 use crate::wire;
 
-pub const PROTOCOL: u32 = 2;
+pub const PROTOCOL: u32 = 3;
 /// Debug builds get their own task and pipe, so a dev build and an installed
 /// release can each keep a working helper.
 pub const TASK_NAME: &str = if cfg!(debug_assertions) {
@@ -68,6 +68,10 @@ pub enum Request {
         letter: char,
         journal: u64,
         from: i64,
+    },
+    /// Create or delete the daily snapshot task. Answered with `Done` or `Error`.
+    SnapshotTask {
+        enabled: bool,
     },
     /// Exit, e.g. so the exe can be replaced by an update.
     Shutdown,
@@ -239,6 +243,19 @@ impl Client {
         write_json(&mut c, &Request::Hello)?;
         let (_, body) = read_frame(&mut c)?;
         Ok(serde_json::from_slice(&body)?)
+    }
+
+    /// Create or delete the daily snapshot task. The helper is already elevated,
+    /// so this needs no prompt.
+    pub fn snapshot_task(&self, enabled: bool) -> anyhow::Result<()> {
+        let mut c = self.connect()?;
+        write_json(&mut c, &Request::SnapshotTask { enabled })?;
+        let (_, body) = read_frame(&mut c)?;
+        match serde_json::from_slice(&body)? {
+            Event::Done { .. } => Ok(()),
+            Event::Error { message } => Err(anyhow::anyhow!(message)),
+            other => Err(anyhow::anyhow!("unexpected reply: {other:?}")),
+        }
     }
 
     /// Ask a running helper to exit. Fine if none is running.

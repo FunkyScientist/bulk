@@ -45,18 +45,12 @@
   let enabling = $state(false);
   async function enable() {
     enabling = true;
-    await app.enableFastScan();
+    await app.allowFastMode();
     enabling = false;
   }
 
   const needsHelper = $derived(app.helper === 'notInstalled' || app.helper === 'outdated');
-  const helperLabel = $derived(
-    enabling
-      ? 'Waiting for Windows…'
-      : app.helper === 'outdated'
-        ? 'Update Turbo scan'
-        : 'Turn on Turbo scan',
-  );
+  const helperLabel = $derived(enabling ? 'Waiting for Windows…' : 'Allow');
 </script>
 
 <aside class="sidebar flex shrink-0 flex-col gap-1 pb-2.5" class:collapsed>
@@ -176,9 +170,9 @@
         <div class="flex justify-center" in:fade={{ duration: 160 }}>
           <Tooltip>
             {#snippet content()}
-              <div class="font-medium">Turbo scan is off</div>
+              <div class="font-medium">Fast mode needs permission</div>
               <div class="text-[11.5px] text-fg-muted">
-                Click to read drives directly, up to 10× faster. Windows asks once.
+                Click to let Bulk read drives directly. Windows asks once.
               </div>
             {/snippet}
             <button
@@ -200,10 +194,10 @@
             <span class="grid size-5 place-items-center rounded-md bg-accent-soft text-accent"
               ><Zap class="size-3" /></span
             >
-            Turbo scan is off
+            Fast mode needs permission
           </div>
           <p class="mt-1.5 text-[11.5px] leading-relaxed text-fg-muted">
-            Read drives directly for scans up to 10× faster. Windows asks for permission once.
+            Bulk reads drives directly for scans in seconds and live updates. Windows asks once.
           </p>
           <button
             class="pressable mt-2.5 h-7 w-full rounded-lg bg-accent text-[12px] font-medium text-accent-fg hover:brightness-110 disabled:opacity-60"

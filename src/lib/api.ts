@@ -23,7 +23,7 @@ export interface Drive {
   alloc: number;
 }
 
-export type HelperStatus = 'checking' | 'ready' | 'notInstalled' | 'outdated';
+export type HelperStatus = 'checking' | 'ready' | 'notInstalled' | 'outdated' | 'off';
 
 export interface Progress {
   files: number;
@@ -67,6 +67,8 @@ export const Flags = {
   EXTRA_LINK: 1 << 6,
   OFFLINE: 1 << 8,
   META: 1 << 9,
+  /** Deleted while watched; shown greyed out until the next scan. */
+  GONE: 1 << 10,
 } as const;
 
 export interface NodeInfo {
@@ -94,6 +96,7 @@ export const TileFlags = {
   MANY_SMALL: 8,
   IN_CART: 16,
   CART_ROOT: 32,
+  GONE: 64,
 } as const;
 
 /** Treemap tiles in struct-of-arrays form, straight from the binary response. */
@@ -248,6 +251,8 @@ export type DupesEvent =
   | { type: 'cancelled' };
 
 export interface Settings {
+  fastMode: boolean;
+  helperDeclined: boolean;
   autoSnapshots: boolean;
   snapshotEvery: 'daily' | 'weekly';
   historyKeep: number;
@@ -258,7 +263,6 @@ export const api = {
   settingsGet: () => invoke<Settings>('settings_get'),
   settingsSet: (settings: Settings) => invoke<Settings>('settings_set', { settings }),
   snapshotStorage: () => invoke<{ path: string; bytes: number; files: number }>('snapshot_storage'),
-  removeFastScan: () => invoke<HelperStatus>('remove_fast_scan'),
   appVersion: () => invoke<string>('app_version'),
   takeOpenPath: () => invoke<string | null>('take_open_path'),
   findPath: (letter: string, path: string) => invoke<number | null>('find_path', { letter, path }),
@@ -300,7 +304,7 @@ export const api = {
   drives: () => invoke<Drive[]>('drives'),
   restored: () => invoke<boolean>('restored'),
   helperStatus: () => invoke<HelperStatus>('helper_status'),
-  enableFastScan: () => invoke<HelperStatus>('enable_fast_scan'),
+  allowFastMode: () => invoke<HelperStatus>('allow_fast_mode'),
   /** Scan a drive, or just `folder` within it when given. */
   scan(letter: string, folder: number | null, onEvent: (e: ScanEvent) => void) {
     const ch = new Channel<ScanEvent>();

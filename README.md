@@ -6,8 +6,9 @@ it up to date live from the change journal.
 
 ## Features
 
-- **Turbo scan**: MFT-level scanning through a small elevated helper (one UAC prompt,
-  ever). Other drives (FAT/exFAT, USB) use a parallel folder walk.
+- **Fast mode** (on by default): MFT-level scanning through a small elevated helper
+  (one UAC prompt, on first launch). Turn it off in Settings to walk folders instead;
+  other drives (FAT/exFAT, USB) always use the parallel folder walk.
 - **Instant reopen and live view**: the last snapshot loads at startup, the change
   journal catches it up, and changes appear as they happen.
 - **What changed**: compare against any earlier snapshot, folder by folder.
@@ -17,7 +18,8 @@ it up to date live from the change journal.
 - **Cleanup cart**: collect items, review, then send to the Recycle Bin (with undo)
   or delete permanently.
 - **Duplicate finder**: matches by content (size, then sampled hash, then BLAKE3).
-- **Scheduled snapshots**: daily or weekly in the background, kept for a set count.
+- **Scheduled snapshots** (off by default): daily or weekly in the background, kept
+  for a set count. The scheduled task only exists while they're turned on.
 - **Explorer integration**: "Analyze with Bulk" on any folder or drive.
 - **Export**: a self-contained HTML report, a CSV of every file, or a JSON folder tree.
 - Keyboard-first: arrows, Enter, Backspace, Delete, `?` for the full list.
@@ -40,8 +42,8 @@ pnpm install
 pnpm tauri dev
 ```
 
-The first time, click **Turn on Turbo scan** (in the sidebar or Settings). Windows asks
-once to register the helper's scheduled task; after that scans need no prompt.
+On first launch Windows asks once to register the helper's scheduled task; after that
+scans need no prompt. If that prompt is declined, the sidebar offers to ask again.
 
 Useful tools:
 

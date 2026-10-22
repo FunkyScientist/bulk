@@ -26,6 +26,11 @@ impl Every {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
+    /// Read drives through the elevated helper (fast scans and live updates).
+    /// When off, scans walk folders; the helper's task stays installed.
+    pub fast_mode: bool,
+    /// The user said no to the elevation prompt; don't ask again on startup.
+    pub helper_declined: bool,
     /// Take snapshots in the background through the scheduled task.
     pub auto_snapshots: bool,
     pub snapshot_every: Every,
@@ -38,7 +43,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            auto_snapshots: true,
+            fast_mode: true,
+            helper_declined: false,
+            auto_snapshots: false,
             snapshot_every: Every::Daily,
             history_keep: 7,
             explorer_menu: true,

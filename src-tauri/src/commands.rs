@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::os::windows::process::CommandExt;
 
-use bulk_core::helper;
 use bulk_core::tree::{NodeId, SortKey, Tree};
 use bulk_core::volume::{DriveKind, Volume};
 use serde::{Deserialize, Serialize};
@@ -64,42 +63,19 @@ pub fn helper_status(state: State<HelperState>) -> HelperStatus {
     *state.status.lock().unwrap()
 }
 
-/// Register the helper task (one UAC prompt). Resolves once the helper answers.
+/// Ask again for the helper's elevation (one UAC prompt), after the user declined
+/// it at startup. Resolves once the helper answers.
 #[tauri::command]
-pub async fn enable_fast_scan(app: AppHandle) -> Res<HelperStatus> {
-    let ok =
-        tauri::async_runtime::spawn_blocking(|| helper::install_elevated(&helper::helper_exe()))
-            .await
-            .map_err(err)?
-            .map_err(err)?;
-    if !ok {
-        return Err("cancelled".into());
-    }
-    let status = tauri::async_runtime::spawn_blocking(|| {
-        let c = helper::Client::new().ok()?;
-        c.ensure_running(std::time::Duration::from_secs(6))
-            .then_some(())
-    })
-    .await
-    .map_err(err)?
-    .map_or(HelperStatus::Outdated, |_| HelperStatus::Ready);
+pub async fn allow_fast_mode(app: AppHandle) -> Res<HelperStatus> {
+    let a = app.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || scan::install_helper(&a))
+        .await
+        .map_err(err)?;
     scan::set_helper_status(&app, status);
-    Ok(status)
-}
-
-/// Remove the scheduled tasks (one UAC prompt). Scans fall back to the walker.
-#[tauri::command]
-pub async fn remove_fast_scan(app: AppHandle) -> Res<HelperStatus> {
-    let ok =
-        tauri::async_runtime::spawn_blocking(|| helper::uninstall_elevated(&helper::helper_exe()))
-            .await
-            .map_err(err)?
-            .map_err(err)?;
-    if !ok {
+    if status == HelperStatus::NotInstalled {
         return Err("cancelled".into());
     }
-    scan::set_helper_status(&app, HelperStatus::NotInstalled);
-    Ok(HelperStatus::NotInstalled)
+    Ok(status)
 }
 
 #[tauri::command]
@@ -440,6 +416,9 @@ fn encode_shapes(
         }
         body.extend_from_slice(&s.id.to_le_bytes());
         let mut flags = s.flags;
+        if tree.get(s.id).has(bulk_core::tree::flags::GONE) {
+            flags |= bulk_core::layout::tile_flags::GONE;
+        }
         if !carted.is_empty() {
             use bulk_core::layout::tile_flags::{CART_ROOT, IN_CART};
             if carted.contains(&s.id) {

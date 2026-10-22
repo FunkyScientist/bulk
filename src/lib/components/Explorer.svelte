@@ -104,7 +104,7 @@
       {bytes(drive.alloc)} in {count(drive.files)} files
       {#if drive.method === 'mft'}<span class="mx-1">·</span><Zap
           class="inline size-3 -translate-y-px text-accent"
-        /> Turbo{/if}
+        /> Fast{/if}
       {#if !drive.live}<span class="mx-1">·</span>as of {ago(drive.scannedAt ?? 0)}{/if}
     </div>
     {#if drive.live}
@@ -165,7 +165,7 @@
       >
         <Share class="size-3.5" /> Export
       </button>
-<div
+      <div
         class="flex h-7 shrink-0 items-stretch rounded-lg border border-line text-[12px] whitespace-nowrap text-fg-muted transition-colors hover:border-line-strong"
         class:opacity-50={scanning}
       >

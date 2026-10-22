@@ -13,6 +13,14 @@ pub fn get(app: &AppHandle) -> Settings {
     app.state::<SettingsState>().0.lock().unwrap().clone()
 }
 
+/// Change and save settings from the backend (e.g. remembering a declined prompt).
+pub fn update(app: &AppHandle, f: impl FnOnce(&mut Settings)) {
+    let state = app.state::<SettingsState>();
+    let mut s = state.0.lock().unwrap();
+    f(&mut s);
+    let _ = bulk_core::settings::save(&s);
+}
+
 pub fn history_keep(app: &AppHandle) -> usize {
     get(app).history_keep.clamp(1, 365)
 }
@@ -23,13 +31,39 @@ pub fn settings_get(state: State<SettingsState>) -> Settings {
 }
 
 #[tauri::command]
-pub fn settings_set(state: State<SettingsState>, settings: Settings) -> Result<Settings, String> {
+pub async fn settings_set(app: AppHandle, settings: Settings) -> Result<Settings, String> {
     let mut s = settings;
     s.history_keep = s.history_keep.clamp(1, 365);
+    let old = get(&app);
+    // Only the backend tracks this.
+    s.helper_declined = old.helper_declined;
+
+    // The snapshot task exists only while automatic snapshots are on. The helper
+    // creates it, since it's already elevated.
+    if s.auto_snapshots != old.auto_snapshots {
+        let on = s.auto_snapshots;
+        tauri::async_runtime::spawn_blocking(move || {
+            bulk_core::helper::Client::new()?.snapshot_task(on)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|_| "Automatic snapshots need fast mode".to_string())?;
+    }
+
     bulk_core::settings::save(&s).map_err(|e| e.to_string())?;
     crate::shell::set_explorer_menu(s.explorer_menu).map_err(|e| e.to_string())?;
-    *state.0.lock().unwrap() = s.clone();
-    Ok(s)
+    *app.state::<SettingsState>().0.lock().unwrap() = s.clone();
+
+    if s.fast_mode != old.fast_mode {
+        if s.fast_mode {
+            // Turning it on by hand is a fresh request: ask again if needed.
+            update(&app, |s| s.helper_declined = false);
+            crate::scan::check_helper(app.clone());
+        } else {
+            crate::scan::helper_off(&app);
+        }
+    }
+    Ok(get(&app))
 }
 
 #[derive(Serialize)]

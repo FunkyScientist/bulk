@@ -22,10 +22,13 @@ use crate::state::{AppState, Drive};
 pub enum HelperStatus {
     Checking,
     Ready,
-    /// The task isn't registered yet; enabling needs one UAC prompt.
+    /// The task isn't registered (the user declined the prompt); allowing it
+    /// needs one UAC prompt.
     NotInstalled,
     /// The task points at a different copy of the helper (e.g. after an update).
     Outdated,
+    /// Fast mode is off in settings: scans walk folders, the helper isn't used.
+    Off,
 }
 
 pub struct HelperState {
@@ -65,8 +68,17 @@ pub fn refresh_drives(app: &AppHandle) {
     }
 }
 
+/// Connect to the helper when fast mode is on. If its task isn't set up yet (first
+/// run, or after an update), ask for elevation right away, unless the user has
+/// already said no.
 pub fn check_helper(app: AppHandle) {
     std::thread::spawn(move || {
+        let settings = crate::settings::get(&app);
+        if !settings.fast_mode {
+            set_helper_status(&app, HelperStatus::Off);
+            return;
+        }
+        set_helper_status(&app, HelperStatus::Checking);
         let mut status = probe_helper();
         // A helper that's busy finishing old connections (e.g. right after the app
         // restarted) can miss the first check; give it one more chance.
@@ -74,9 +86,42 @@ pub fn check_helper(app: AppHandle) {
             std::thread::sleep(Duration::from_secs(3));
             status = probe_helper();
         }
+        if status != HelperStatus::Ready && !settings.helper_declined {
+            status = install_helper(&app);
+        }
         eprintln!("helper status: {status:?}");
         set_helper_status(&app, status);
     });
+}
+
+/// Register the helper's task (one UAC prompt) and start it. A declined prompt
+/// is remembered so startup doesn't ask every time.
+pub fn install_helper(app: &AppHandle) -> HelperStatus {
+    match helper::install_elevated(&helper::helper_exe()) {
+        Ok(true) => {
+            crate::settings::update(app, |s| s.helper_declined = false);
+            let ok = Client::new().is_ok_and(|c| c.ensure_running(Duration::from_secs(6)));
+            if ok {
+                HelperStatus::Ready
+            } else {
+                HelperStatus::Outdated
+            }
+        }
+        _ => {
+            crate::settings::update(app, |s| s.helper_declined = true);
+            HelperStatus::NotInstalled
+        }
+    }
+}
+
+/// Stop using the helper: live updates end and scans walk folders. The task stays
+/// installed so turning fast mode back on needs no prompt.
+pub fn helper_off(app: &AppHandle) {
+    set_helper_status(app, HelperStatus::Off);
+    let state = app.state::<AppState>();
+    for d in state.drives.lock().unwrap().values_mut() {
+        d.stop_watch();
+    }
 }
 
 /// Record the helper status; once it's ready, restored drives can go live.

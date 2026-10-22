@@ -74,7 +74,7 @@
           class="flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-[11.5px] text-fg-muted"
           in:fade
         >
-          {#if s.method === 'mft'}<Zap class="size-3 text-accent" /> Turbo scan{:else}Standard scan{/if}
+          {#if s.method === 'mft'}<Zap class="size-3 text-accent" /> Fast scan{:else}Folder scan{/if}
         </span>
       {/if}
       <button

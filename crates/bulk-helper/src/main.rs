@@ -89,8 +89,8 @@ fn install(user: Option<String>) -> anyhow::Result<()> {
     let sid = user.context("--install needs --user <SID>")?;
     anyhow::ensure!(valid_sid(&sid), "bad SID");
     let exe = std::env::current_exe()?;
+    // The snapshot task is only created once automatic snapshots are turned on.
     register_task(TASK_NAME, &task_xml(&sid, &exe))?;
-    register_task(SNAPSHOT_TASK, &snapshot_task_xml(&sid, &exe))?;
     // An older helper may still own the pipe; stop it so the new one takes over.
     let _ = Command::new("taskkill")
         .args(["/F", "/IM", "bulk-helper.exe", "/FI"])
@@ -121,11 +121,26 @@ fn register_task(name: &str, xml: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn uninstall() -> anyhow::Result<()> {
-    let _ = Command::new("schtasks")
-        .args(["/Delete", "/TN", SNAPSHOT_TASK, "/F"])
+/// Delete a task; fine if it doesn't exist.
+fn delete_task(name: &str) -> anyhow::Result<()> {
+    if Command::new("schtasks")
+        .args(["/Query", "/TN", name])
         .creation_flags(CREATE_NO_WINDOW)
-        .output();
+        .output()
+        .is_ok_and(|o| !o.status.success())
+    {
+        return Ok(());
+    }
+    let out = Command::new("schtasks")
+        .args(["/Delete", "/TN", name, "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()?;
+    anyhow::ensure!(out.status.success(), "couldn't delete {name}");
+    Ok(())
+}
+
+fn uninstall() -> anyhow::Result<()> {
+    let _ = delete_task(SNAPSHOT_TASK);
     let out = Command::new("schtasks")
         .args(["/Delete", "/TN", TASK_NAME, "/F"])
         .creation_flags(CREATE_NO_WINDOW)
@@ -393,8 +408,9 @@ fn serve(user: Option<String>) -> anyhow::Result<()> {
         a.touch();
         let conn = unsafe { File::from_raw_handle(h as _) };
         let raw = h as isize;
+        let sid = sid.clone();
         std::thread::spawn(move || {
-            if let Err(e) = handle(conn, raw) {
+            if let Err(e) = handle(conn, raw, &sid) {
                 log(&format!("connection: {e:#}"));
             }
             a.touch();
@@ -431,7 +447,7 @@ fn client_allowed(pipe: isize) -> bool {
     same_dir && client != me
 }
 
-fn handle(mut conn: File, raw: isize) -> anyhow::Result<()> {
+fn handle(mut conn: File, raw: isize, sid: &str) -> anyhow::Result<()> {
     if !client_allowed(raw) {
         write_json(
             &mut conn,
@@ -460,6 +476,24 @@ fn handle(mut conn: File, raw: isize) -> anyhow::Result<()> {
             std::process::exit(0);
         }
         Request::Scan { letter } => scan_drive(&mut conn, letter)?,
+        Request::SnapshotTask { enabled } => {
+            let result = if enabled {
+                std::env::current_exe()
+                    .map_err(Into::into)
+                    .and_then(|exe| register_task(SNAPSHOT_TASK, &snapshot_task_xml(sid, &exe)))
+            } else {
+                delete_task(SNAPSHOT_TASK)
+            };
+            match result {
+                Ok(()) => write_json(&mut conn, &Event::Done { elapsed_ms: 0 })?,
+                Err(e) => write_json(
+                    &mut conn,
+                    &Event::Error {
+                        message: format!("{e:#}"),
+                    },
+                )?,
+            }
+        }
         Request::Changes {
             letter,
             journal,
