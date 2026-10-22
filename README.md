@@ -64,8 +64,11 @@ Notes:
 ## Building the installer
 
 ```
-pnpm tauri build
+pnpm bundle
 ```
+
+(`tauri.release.conf.json` adds the helper to the installer; it's kept out of the main
+config because Tauri would otherwise copy it over the dev helper in `target/debug`.)
 
 Produces a per-machine NSIS installer in `target/release/bundle/nsis`. Installing into
 Program Files matters: the helper runs elevated without a prompt, so its exe must not be

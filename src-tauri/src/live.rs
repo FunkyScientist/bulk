@@ -150,10 +150,10 @@ pub fn start(app: &AppHandle, letter: char) {
 fn clear(app: &AppHandle, letter: char, stop: &Arc<AtomicBool>) {
     let state = app.state::<AppState>();
     let mut drives = state.drives.lock().unwrap();
-    if let Some(d) = drives.get_mut(&letter) {
-        if d.watch.as_ref().is_some_and(|w| Arc::ptr_eq(w, stop)) {
-            d.watch = None;
-        }
+    if let Some(d) = drives.get_mut(&letter)
+        && d.watch.as_ref().is_some_and(|w| Arc::ptr_eq(w, stop))
+    {
+        d.watch = None;
     }
     drop(drives);
     let _ = app.emit("drive-updated", letter);

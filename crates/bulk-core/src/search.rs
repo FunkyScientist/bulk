@@ -143,11 +143,8 @@ pub fn search(tree: &Tree, q: &Query, limit: usize) -> (Vec<Hit>, usize) {
     if q.is_empty() {
         return (Vec::new(), 0);
     }
-    let finders: Vec<memchr::memmem::Finder> = q
-        .words
-        .iter()
-        .map(|w| memchr::memmem::Finder::new(w))
-        .collect();
+    let finders: Vec<memchr::memmem::Finder> =
+        q.words.iter().map(memchr::memmem::Finder::new).collect();
     let n = tree.len();
 
     let (mut hits, total) = (1..n)

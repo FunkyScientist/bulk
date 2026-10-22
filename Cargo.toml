@@ -7,6 +7,12 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 
+[workspace.lints.clippy]
+# Descending sorts read more clearly as `b.cmp(&a)` than with `Reverse`.
+unnecessary_sort_by = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
 [workspace.dependencies]
 bulk-core = { path = "crates/bulk-core" }
 anyhow = "1"

@@ -183,12 +183,13 @@ pub fn apply(tree: &mut Tree, index: &mut FrnIndex, changes: &[Change]) -> usize
     for c in changes {
         match c {
             Change::Removed(frn) => {
-                if let Some(id) = index.live(tree, *frn) {
-                    if tree.get(id).frn == *frn && id != tree.root {
-                        tree.remove(id);
-                        index.0.remove(&(frn & RECORD_MASK));
-                        touched += 1;
-                    }
+                if let Some(id) = index.live(tree, *frn)
+                    && tree.get(id).frn == *frn
+                    && id != tree.root
+                {
+                    tree.remove(id);
+                    index.0.remove(&(frn & RECORD_MASK));
+                    touched += 1;
                 }
             }
             Change::Present(s) => pending.push(s),

@@ -191,10 +191,10 @@ pub fn treemap(tree: &Tree, root: NodeId, o: &TreemapOptions) -> Vec<Tile> {
                 });
             }
         }
-        if hidden > inner.area() * 0.2 {
-            if let Some(t) = tiles.get_mut(p.tile) {
-                t.flags |= tile_flags::MANY_SMALL;
-            }
+        if hidden > inner.area() * 0.2
+            && let Some(t) = tiles.get_mut(p.tile)
+        {
+            t.flags |= tile_flags::MANY_SMALL;
         }
     }
 

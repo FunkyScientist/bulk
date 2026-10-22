@@ -112,13 +112,17 @@ fn parse_info(b: &[u8]) -> Option<(PathBuf, SystemTime)> {
     let units: Vec<u16> = match version {
         1 => b
             .get(24..24 + 520)?
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect(),
         2 => {
             let n = u32::from_le_bytes(b.get(24..28)?.try_into().ok()?) as usize;
             b.get(28..28 + n * 2)?
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))
                 .collect()
         }
