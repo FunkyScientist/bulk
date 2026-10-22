@@ -75,7 +75,7 @@
       shortcuts = settings = rescan = app.cartOpen = false;
     } else if (e.key === 'Delete' && drive && app.selected !== null && app.selected !== 0) {
       e.preventDefault();
-      app.addToCart(drive.letter, [app.selected]);
+      app.toggleCart(drive.letter, app.selected);
     } else if (e.key === 'Backspace' && drive) {
       e.preventDefault();
       app.zoomOut();

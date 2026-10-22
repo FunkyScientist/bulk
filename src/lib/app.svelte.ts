@@ -234,6 +234,22 @@ class AppState {
     this.cart = await api.cartRemove(paths);
   }
 
+  /** Delete key: add the node to the cart, or take it out if it's already there. */
+  async toggleCart(letter: string, id: number) {
+    const path = (await api.nodePath(letter, id)).toLowerCase();
+    const entry = this.cart.find((c) => c.path.toLowerCase() === path);
+    if (entry) {
+      await this.removeFromCart([entry.path]);
+      this.toast('Removed from cleanup cart');
+    } else if (this.inCart(path)) {
+      this.toast('Its folder is already in the cleanup cart', {
+        action: { label: 'Review', run: () => (this.cartOpen = true) },
+      });
+    } else {
+      await this.addToCart(letter, [id]);
+    }
+  }
+
   inCart(path: string) {
     const p = path.toLowerCase();
     return this.cart.some((c) => {

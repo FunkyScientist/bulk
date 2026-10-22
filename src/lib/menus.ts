@@ -20,6 +20,7 @@ export async function nodeMenu(e: MouseEvent, letter: string, id: number, extra:
         ? {
             label: 'Remove from cleanup cart',
             icon: Undo,
+            hint: 'Del',
             run: () => app.removeFromCart([info.path]),
           }
         : {
