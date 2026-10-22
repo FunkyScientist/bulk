@@ -102,6 +102,11 @@
     </div>
     <div class="tabular hidden truncate text-[12px] text-fg-subtle md:block">
       {bytes(drive.alloc)} in {count(drive.files)} files
+      <span class="mx-1">·</span><span
+        class:text-warn={drive.total > 0 && drive.free / drive.total < 0.1}
+        class:text-danger={drive.total > 0 && drive.free / drive.total < 0.05}
+        title="{bytes(drive.free)} free of {bytes(drive.total)}">{bytes(drive.free)} free</span
+      >
       {#if drive.method === 'mft'}<span class="mx-1">·</span><Zap
           class="inline size-3 -translate-y-px text-accent"
         /> Fast{/if}
