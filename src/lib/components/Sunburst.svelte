@@ -354,21 +354,39 @@
       cart: !!(arcs.flags[hover] & TileFlags.IN_CART),
     };
   });
-  let tipName = $state('');
+  // Path relative to the folder the chart shows, e.g. `SubFolder\Item.ext`.
+  let tipPath = $state('');
+  const pathCache = new Map<number, string>();
   $effect(() => {
     const t = tip;
     if (!t) return;
-    if (t.name) {
-      tipName = t.name;
+    const base = focus;
+    const key = t.id;
+    const hit = pathCache.get(key);
+    if (hit !== undefined) {
+      tipPath = hit;
       return;
     }
-    tipName = '';
-    const id = t.id;
+    tipPath = t.name ?? '';
     const timer = setTimeout(async () => {
-      const info = await api.nodeInfo(letter, id);
-      if (tip?.id === id) tipName = info.name;
-    }, 60);
+      const p = await api.relPath(letter, key, base);
+      if (base !== focus) return;
+      pathCache.set(key, p);
+      if (tip?.id === key) tipPath = p;
+    }, 30);
     return () => clearTimeout(timer);
+  });
+  // A new view or new data can change any path.
+  $effect(() => {
+    void focus;
+    void app.rowsVersion;
+    pathCache.clear();
+  });
+  const tipParts = $derived.by(() => {
+    const i = tipPath.lastIndexOf('\\');
+    return i < 0
+      ? { dir: '', name: tipPath }
+      : { dir: tipPath.slice(0, i + 1), name: tipPath.slice(i + 1) };
   });
 </script>
 
@@ -442,7 +460,10 @@
         12}px; transform: translate({right ? '-100%' : '0'}, -100%)"
       in:fade={{ duration: 90 }}
     >
-      <div class="truncate font-medium">{tipName || '…'}</div>
+      <div class="font-medium break-all">
+        {#if tipParts.dir}<span class="font-normal text-fg-muted">{tipParts.dir}</span
+          >{/if}{tipParts.name || '…'}
+      </div>
       <div class="tabular text-[11.5px] text-fg-muted">
         {bytes(tip.value)}
         {#if total > 0}<span class="text-fg-subtle"> · {percent(tip.value / total)}</span>{/if}

@@ -224,6 +224,35 @@ pub fn node_path(state: State<AppState>, letter: char, id: NodeId) -> Res<String
     Ok(tree.path(id))
 }
 
+/// Path of `id` relative to the folder `base` the chart shows (the drive root when
+/// `None`), e.g. `SubFolder\Item.ext`.
+#[tauri::command]
+pub fn rel_path(
+    state: State<AppState>,
+    letter: char,
+    id: NodeId,
+    base: Option<NodeId>,
+) -> Res<String> {
+    let drives = state.drives.lock().unwrap();
+    let tree = drives
+        .get(&letter)
+        .and_then(|d| d.tree.as_ref())
+        .ok_or("not scanned")?;
+    if id as usize >= tree.len() {
+        return Err("bad node".into());
+    }
+    let base = base.unwrap_or(tree.root);
+    let mut parts = vec![tree.name(id)];
+    for a in tree.ancestors(id) {
+        if a == base || a == tree.root {
+            break;
+        }
+        parts.push(tree.name(a));
+    }
+    parts.reverse();
+    Ok(parts.join("\\"))
+}
+
 #[derive(Serialize)]
 pub struct Crumb {
     id: NodeId,

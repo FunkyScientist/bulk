@@ -87,7 +87,14 @@ export interface Crumb {
   name: string;
 }
 
-export const TileFlags = { DIR: 1, HEADER: 2, COLLAPSED: 4, MANY_SMALL: 8, IN_CART: 16, CART_ROOT: 32 } as const;
+export const TileFlags = {
+  DIR: 1,
+  HEADER: 2,
+  COLLAPSED: 4,
+  MANY_SMALL: 8,
+  IN_CART: 16,
+  CART_ROOT: 32,
+} as const;
 
 /** Treemap tiles in struct-of-arrays form, straight from the binary response. */
 export interface Tiles {
@@ -307,6 +314,8 @@ export const api = {
   setSort: (letter: string, key: SortKey) => invoke<number>('set_sort', { letter, key }),
   reveal: (letter: string, id: number) => invoke<number | null>('reveal', { letter, id }),
   nodePath: (letter: string, id: number) => invoke<string>('node_path', { letter, id }),
+  relPath: (letter: string, id: number, base: number | null) =>
+    invoke<string>('rel_path', { letter, id, base }),
   showInExplorer: (path: string) => invoke<void>('show_in_explorer', { path }),
   openPath: (path: string) => invoke<void>('open_path', { path }),
   export: (letter: string, root: number | null, format: 'html' | 'csv' | 'json', path: string) =>
