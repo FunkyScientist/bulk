@@ -149,6 +149,10 @@ export const api = {
     const buf = await invoke<ArrayBuffer>('treemap', { letter, root, width, height });
     return decodeTiles(buf);
   },
+  async sunburst(letter: string, root: number | null, depth: number) {
+    const buf = await invoke<ArrayBuffer>('sunburst', { letter, root, depth });
+    return decodeTiles(buf);
+  },
   nodeInfo: (letter: string, id: number) => invoke<NodeInfo>('node_info', { letter, id }),
   ancestors: (letter: string, id: number) => invoke<Crumb[]>('ancestors', { letter, id }),
   drives: () => invoke<Drive[]>('drives'),

@@ -36,6 +36,7 @@ pub fn run() {
             commands::node_path,
             commands::ancestors,
             commands::treemap,
+            commands::sunburst,
             commands::node_info,
             commands::show_in_explorer,
             commands::backdrop,

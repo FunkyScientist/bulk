@@ -1,7 +1,7 @@
 use std::os::windows::process::CommandExt;
 
 use bulk_core::helper;
-use bulk_core::tree::{NodeId, SortKey};
+use bulk_core::tree::{NodeId, SortKey, Tree};
 use bulk_core::volume::{DriveKind, Volume};
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
@@ -263,9 +263,7 @@ pub fn node_info(state: State<AppState>, letter: char, id: NodeId) -> Res<NodeIn
     })
 }
 
-/// Treemap tiles for `root`, packed as binary:
-/// `u32 count`, then per tile `f32 x, y, w, h; u32 id; u8 depth, flags, category, 0; u64 value`,
-/// then `u32 labels` and per label `u32 id; u16 len; utf-8 bytes`.
+/// Treemap tiles for `root`, packed as binary (see `encode_shapes`).
 #[tauri::command]
 pub fn treemap(
     state: State<AppState>,
@@ -288,37 +286,97 @@ pub fn treemap(
         ..Default::default()
     };
     let tiles = treemap(tree, root, &opts);
+    let shapes = tiles.iter().map(|t| Shape {
+        geom: [t.rect.x, t.rect.y, t.rect.w, t.rect.h],
+        id: t.id,
+        depth: t.depth,
+        flags: t.flags,
+        category: t.category,
+        // Names only for tiles big enough to show text.
+        label: t.flags & tile_flags::HEADER != 0 || (t.rect.w >= 44.0 && t.rect.h >= 16.0),
+    });
+    Ok(tauri::ipc::Response::new(encode_shapes(
+        tree,
+        shapes,
+        opts.use_alloc,
+    )))
+}
 
-    let mut out = Vec::with_capacity(8 + tiles.len() * 32);
-    out.extend_from_slice(&(tiles.len() as u32).to_le_bytes());
-    for t in &tiles {
-        for v in [t.rect.x, t.rect.y, t.rect.w, t.rect.h] {
-            out.extend_from_slice(&v.to_le_bytes());
+/// Sunburst arcs for `root`, in the same binary layout as `treemap` with
+/// `x, y` = start and end angle.
+#[tauri::command]
+pub fn sunburst(
+    state: State<AppState>,
+    letter: char,
+    root: Option<NodeId>,
+    depth: u8,
+) -> Res<tauri::ipc::Response> {
+    let drives = state.drives.lock().unwrap();
+    let d = drives.get(&letter).ok_or("unknown drive")?;
+    let tree = d.tree.as_ref().ok_or("not scanned")?;
+    let root = root
+        .filter(|&r| (r as usize) < tree.len())
+        .unwrap_or(tree.root);
+    let use_alloc = d.view.sort != SortKey::Size;
+    let arcs =
+        bulk_core::layout::sunburst(tree, root, depth.clamp(1, 12), 0.0025, 20_000, use_alloc);
+    let shapes = arcs.iter().map(|a| Shape {
+        geom: [a.a0, a.a1, 0.0, 0.0],
+        id: a.id,
+        depth: a.depth,
+        flags: a.flags,
+        category: a.category,
+        label: a.a1 - a.a0 > 0.05,
+    });
+    Ok(tauri::ipc::Response::new(encode_shapes(
+        tree, shapes, use_alloc,
+    )))
+}
+
+struct Shape {
+    geom: [f32; 4],
+    id: NodeId,
+    depth: u8,
+    flags: u8,
+    category: u8,
+    label: bool,
+}
+
+/// `u32 count`, then per shape `f32 ×4; u32 id; u8 depth, flags, category, 0; u64 value`,
+/// then `u32 labels` and per label `u32 id; u16 len; utf-8 bytes`.
+fn encode_shapes(tree: &Tree, shapes: impl Iterator<Item = Shape>, use_alloc: bool) -> Vec<u8> {
+    let mut body = Vec::new();
+    let mut labels = Vec::new();
+    let mut count = 0u32;
+    let mut label_count = 0u32;
+    for s in shapes {
+        count += 1;
+        for v in s.geom {
+            body.extend_from_slice(&v.to_le_bytes());
         }
-        out.extend_from_slice(&t.id.to_le_bytes());
-        out.extend_from_slice(&[t.depth, t.flags, t.category, 0]);
-        let n = tree.get(t.id);
-        let value = if opts.use_alloc { n.alloc } else { n.size };
-        out.extend_from_slice(&value.to_le_bytes());
+        body.extend_from_slice(&s.id.to_le_bytes());
+        body.extend_from_slice(&[s.depth, s.flags, s.category, 0]);
+        let n = tree.get(s.id);
+        let value = if use_alloc { n.alloc } else { n.size };
+        body.extend_from_slice(&value.to_le_bytes());
+        if s.label {
+            label_count += 1;
+            let name = tree.name(s.id);
+            let mut end = name.len().min(200);
+            while !name.is_char_boundary(end) {
+                end -= 1;
+            }
+            labels.extend_from_slice(&s.id.to_le_bytes());
+            labels.extend_from_slice(&(end as u16).to_le_bytes());
+            labels.extend_from_slice(&name.as_bytes()[..end]);
+        }
     }
-    // Names only for tiles big enough to show text.
-    let labelled: Vec<_> = tiles
-        .iter()
-        .filter(|t| t.flags & tile_flags::HEADER != 0 || (t.rect.w >= 44.0 && t.rect.h >= 16.0))
-        .collect();
-    out.extend_from_slice(&(labelled.len() as u32).to_le_bytes());
-    for t in labelled {
-        let name = tree.name(t.id).as_bytes();
-        let name = &name[..name.len().min(200)];
-        let name = match std::str::from_utf8(name) {
-            Ok(s) => s.as_bytes(),
-            Err(e) => &name[..e.valid_up_to()],
-        };
-        out.extend_from_slice(&t.id.to_le_bytes());
-        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        out.extend_from_slice(name);
-    }
-    Ok(tauri::ipc::Response::new(out))
+    let mut out = Vec::with_capacity(8 + body.len() + labels.len());
+    out.extend_from_slice(&count.to_le_bytes());
+    out.extend_from_slice(&body);
+    out.extend_from_slice(&label_count.to_le_bytes());
+    out.extend_from_slice(&labels);
+    out
 }
 
 #[tauri::command]

@@ -195,6 +195,90 @@ pub fn treemap(tree: &Tree, root: NodeId, o: &TreemapOptions) -> Vec<Tile> {
     tiles
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Arc {
+    pub id: NodeId,
+    /// Start and end angle in radians, 0 at 12 o'clock, clockwise.
+    pub a0: f32,
+    pub a1: f32,
+    /// Ring, 1 = innermost.
+    pub depth: u8,
+    pub flags: u8,
+    pub category: u8,
+}
+
+/// Sunburst rings below `root`, `max_depth` rings deep. Arcs thinner than
+/// `min_angle` are dropped, and their folders aren't opened.
+pub fn sunburst(
+    tree: &Tree,
+    root: NodeId,
+    max_depth: u8,
+    min_angle: f32,
+    max_arcs: usize,
+    use_alloc: bool,
+) -> Vec<Arc> {
+    let value = |id: NodeId| {
+        let n = tree.get(id);
+        if use_alloc { n.alloc } else { n.size }
+    };
+    let mut out = Vec::new();
+    let mut stack = vec![(root, 0.0f64, std::f64::consts::TAU, 0u8)];
+    let mut kids: Vec<(NodeId, u64)> = Vec::new();
+    while let Some((id, a0, a1, depth)) = stack.pop() {
+        if depth >= max_depth || out.len() >= max_arcs {
+            continue;
+        }
+        let total = value(id) as f64;
+        if total <= 0.0 {
+            continue;
+        }
+        kids.clear();
+        kids.extend(
+            tree.children(id)
+                .filter(|&c| !tree.get(c).has(flags::EXTRA_LINK))
+                .map(|c| (c, value(c)))
+                .filter(|&(_, v)| v > 0),
+        );
+        kids.sort_unstable_by(|a, b| b.1.cmp(&a.1));
+        let span = a1 - a0;
+        let mut a = a0;
+        for &(c, v) in kids.iter() {
+            let s = span * v as f64 / total;
+            if (s as f32) < min_angle {
+                break; // sorted, so the rest are smaller still
+            }
+            let n = tree.get(c);
+            let opens = n.is_dir() && tree.has_children(c) && depth + 1 < max_depth;
+            let mut f = 0;
+            if n.is_dir() {
+                f |= tile_flags::DIR;
+                if !opens {
+                    f |= tile_flags::COLLAPSED;
+                }
+            }
+            out.push(Arc {
+                id: c,
+                a0: a as f32,
+                a1: (a + s) as f32,
+                depth: depth + 1,
+                flags: f,
+                category: if n.is_dir() {
+                    0
+                } else {
+                    category(tree.name(c))
+                },
+            });
+            if opens {
+                stack.push((c, a, a + s, depth + 1));
+            }
+            a += s;
+        }
+    }
+    // Inner rings first, so outer arcs draw over any antialiasing seams.
+    out.sort_by_key(|a| a.depth);
+    out
+}
+
 fn shrink(r: Rect, by: f32) -> Rect {
     Rect {
         x: r.x + by,
@@ -341,6 +425,21 @@ mod tests {
         for (_, r) in &out {
             assert!(r.x >= -1e-4 && r.y >= -1e-4 && r.x + r.w <= 6.0001 && r.y + r.h <= 4.0001);
         }
+    }
+
+    #[test]
+    fn sunburst_angles_are_proportional() {
+        let mut t = Tree::new("C:");
+        let a = t.add(t.root, "a", flags::DIR, 0, 0, 0, 0);
+        t.add(a, "x.bin", 0, 0, 300, 0, 0);
+        t.add(t.root, "b.bin", 0, 0, 100, 0, 0);
+        t.aggregate();
+        let arcs = sunburst(&t, t.root, 4, 0.0, 100, true);
+        assert_eq!(arcs.len(), 3);
+        let top: Vec<_> = arcs.iter().filter(|a| a.depth == 1).collect();
+        assert!((top[0].a1 - top[0].a0 - std::f32::consts::TAU * 0.75).abs() < 1e-4);
+        let inner = arcs.iter().find(|a| a.depth == 2).unwrap();
+        assert!((inner.a1 - top[0].a1).abs() < 1e-4);
     }
 
     #[test]
