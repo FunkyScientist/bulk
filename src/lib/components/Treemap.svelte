@@ -5,7 +5,8 @@
   import { app } from '$lib/app.svelte';
   import { nodeMenu } from '$lib/menus';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
-  import { categoryColor } from '$lib/palette';
+  import Trash2 from '@lucide/svelte/icons/trash-2';
+  import { cartStripes, categoryColor, inkOn } from '$lib/palette';
   import { bytes, percent } from '$lib/format';
 
   let { letter }: { letter: string } = $props();
@@ -44,6 +45,7 @@
     void app.rowsVersion;
     void app.sort;
     void app.resolvedTheme;
+    void app.cart;
     const w = width;
     const h = height;
     if (!w || !h) return;
@@ -117,6 +119,8 @@
     const fg = css('--fg');
     const muted = css('--fg-muted');
     const accent = css('--accent');
+    const danger = css('--danger');
+    const cartRoots: number[] = [];
     ctx.textBaseline = 'middle';
 
     for (let i = 0; i < t.count; i++) {
@@ -143,6 +147,8 @@
         ctx.fillStyle = categoryColor(t.cat[i], theme);
         ctx.globalAlpha = dark ? 0.82 : 0.88;
       }
+      // Things in the cart fade back, so what stays stands out.
+      if (f & TileFlags.IN_CART) ctx.globalAlpha *= 0.45;
       if (r >= 1.5) {
         ctx.beginPath();
         ctx.roundRect(rx, ry, rw, rh, r);
@@ -156,6 +162,14 @@
         ctx.fill();
       }
       ctx.globalAlpha = 1;
+      // Stripe leaves only: stripes on nested folders would stack up.
+      if (f & TileFlags.IN_CART && (!(f & TileFlags.DIR) || f & TileFlags.COLLAPSED)) {
+        ctx.fillStyle = cartStripes(ctx, danger);
+        ctx.globalAlpha = dark ? 0.32 : 0.28;
+        ctx.fillRect(rx, ry, rw, rh);
+        ctx.globalAlpha = 1;
+      }
+      if (f & TileFlags.CART_ROOT) cartRoots.push(i);
 
       const label = t.labels.get(t.id[i]);
       if (!label) continue;
@@ -176,8 +190,8 @@
         }
       } else if (!(f & TileFlags.DIR) || f & TileFlags.COLLAPSED) {
         ctx.font = '500 11px "Geist Variable", sans-serif';
-        ctx.fillStyle = dark ? 'rgba(10,10,16,0.82)' : 'rgba(255,255,255,0.95)';
-        if (f & TileFlags.DIR) ctx.fillStyle = fg;
+        ctx.fillStyle = dark ? 'rgba(10,10,16,0.82)' : inkOn(categoryColor(t.cat[i], theme));
+        if (f & TileFlags.DIR || f & TileFlags.IN_CART) ctx.fillStyle = fg;
         const cy = h >= 32 ? y + h / 2 - 6 : y + h / 2;
         ctx.fillText(ellipsize(label, w - 10, 6.1), x + 5, cy);
         if (h >= 32) {
@@ -188,6 +202,20 @@
         }
       }
     }
+
+    // Outline whatever was added to the cart, on top of everything inside it.
+    ctx.strokeStyle = danger;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    for (const i of cartRoots) {
+      const w = t.w[i] - 1.5;
+      const h = t.h[i] - 1.5;
+      if (w < 3 || h < 3) continue;
+      ctx.beginPath();
+      ctx.roundRect(t.x[i] + 0.75, t.y[i] + 0.75, w, h, Math.min(4, w / 4, h / 4));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
   }
 
   let hatchCache: { ctx: CanvasRenderingContext2D; dark: boolean; pattern: CanvasPattern } | null =
@@ -290,9 +318,10 @@
       ctx.beginPath();
       ctx.roundRect(x, y, Math.max(1, w), Math.max(1, h), Math.min(4, w / 4, h / 4));
       if (kind === 'hover') {
-        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        const dark = app.resolvedTheme === 'dark';
+        ctx.fillStyle = dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.3)';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.strokeStyle = dark ? 'rgba(255,255,255,0.85)' : 'rgba(16,16,24,0.55)';
         ctx.lineWidth = 1.5;
       } else {
         ctx.strokeStyle = app.resolvedTheme === 'dark' ? '#fff' : '#17171d';
@@ -390,6 +419,7 @@
       name: tiles.labels.get(id),
       value: tiles.value[hover],
       dir: !!(tiles.flags[hover] & TileFlags.DIR),
+      cart: !!(tiles.flags[hover] & TileFlags.IN_CART),
     };
   });
 
@@ -464,6 +494,11 @@
         {bytes(tip.value)}
         {#if total > 0}<span class="text-fg-subtle"> · {percent(tip.value / total)}</span>{/if}
       </div>
+      {#if tip.cart}
+        <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-danger">
+          <Trash2 class="size-3" /> In cleanup cart
+        </div>
+      {/if}
     </div>
   {/if}
 </div>

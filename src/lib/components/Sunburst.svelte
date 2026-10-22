@@ -5,7 +5,8 @@
   import { app } from '$lib/app.svelte';
   import { nodeMenu } from '$lib/menus';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
-  import { categoryColor } from '$lib/palette';
+  import Trash2 from '@lucide/svelte/icons/trash-2';
+  import { cartStripes, categoryColor, inkOn } from '$lib/palette';
   import { bytes, percent } from '$lib/format';
 
   let { letter }: { letter: string } = $props();
@@ -43,6 +44,7 @@
     void app.rowsVersion;
     void app.sort;
     void app.resolvedTheme;
+    void app.cart;
     if (!width || !height) return;
     untrack(() => {
       clearTimeout(timer);
@@ -156,6 +158,7 @@
     const theme = app.resolvedTheme;
     const dark = theme === 'dark';
     const accent = css('--accent');
+    const danger = css('--danger');
     const t = arcs;
     const sel = app.selected;
 
@@ -198,11 +201,25 @@
         ctx.fillStyle = categoryColor(t.cat[i], theme);
         ctx.globalAlpha = alpha * (dark ? 0.82 : 0.88);
       }
+      if (f & TileFlags.IN_CART) ctx.globalAlpha *= 0.45;
       ctx.beginPath();
       ctx.arc(cx, cy, Math.max(hole, r1), s, e);
       ctx.arc(cx, cy, Math.max(hole, r0), e, s, true);
       ctx.closePath();
       ctx.fill();
+      if (f & TileFlags.IN_CART) {
+        ctx.fillStyle = cartStripes(ctx, danger);
+        ctx.globalAlpha = alpha * (dark ? 0.32 : 0.28);
+        ctx.fill();
+      }
+      if (f & TileFlags.CART_ROOT) {
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = danger;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       if (!z && (i === hover || t.id[i] === sel)) {
         ctx.globalAlpha = 1;
@@ -215,7 +232,7 @@
         ctx.stroke();
         ctx.shadowBlur = 0;
         if (i === hover) {
-          ctx.fillStyle = 'rgba(255,255,255,0.14)';
+          ctx.fillStyle = dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.3)';
           ctx.fill();
         }
       }
@@ -237,7 +254,14 @@
         const mid = (t.x[i] + t.y[i]) / 2;
         const text = ellipsize(label, len * 0.82, 6.1);
         if (!text) continue;
-        ctx.fillStyle = t.flags[i] & TileFlags.DIR || !dark ? '#fff' : 'rgba(10,10,16,0.85)';
+        const f = t.flags[i];
+        ctx.fillStyle = dark
+          ? f & TileFlags.DIR
+            ? '#fff'
+            : 'rgba(10,10,16,0.85)'
+          : f & TileFlags.DIR || f & TileFlags.IN_CART
+            ? 'rgba(16,16,24,0.88)'
+            : inkOn(categoryColor(t.cat[i], 'light'));
         // Run the text along the arc, flipped on the lower half so it's never upside down.
         const am = mid - Math.PI / 2;
         const flip = mid > Math.PI / 2 && mid < (Math.PI * 3) / 2;
@@ -323,7 +347,12 @@
   const tip = $derived.by(() => {
     if (hover < 0 || !arcs || animating) return null;
     const id = arcs.id[hover];
-    return { id, name: arcs.labels.get(id), value: arcs.value[hover] };
+    return {
+      id,
+      name: arcs.labels.get(id),
+      value: arcs.value[hover],
+      cart: !!(arcs.flags[hover] & TileFlags.IN_CART),
+    };
   });
   let tipName = $state('');
   $effect(() => {
@@ -418,6 +447,11 @@
         {bytes(tip.value)}
         {#if total > 0}<span class="text-fg-subtle"> · {percent(tip.value / total)}</span>{/if}
       </div>
+      {#if tip.cart}
+        <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-danger">
+          <Trash2 class="size-3" /> In cleanup cart
+        </div>
+      {/if}
     </div>
   {/if}
 </div>

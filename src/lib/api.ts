@@ -87,7 +87,7 @@ export interface Crumb {
   name: string;
 }
 
-export const TileFlags = { DIR: 1, HEADER: 2, COLLAPSED: 4, MANY_SMALL: 8 } as const;
+export const TileFlags = { DIR: 1, HEADER: 2, COLLAPSED: 4, MANY_SMALL: 8, IN_CART: 16, CART_ROOT: 32 } as const;
 
 /** Treemap tiles in struct-of-arrays form, straight from the binary response. */
 export interface Tiles {

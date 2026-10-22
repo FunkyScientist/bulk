@@ -1,7 +1,7 @@
 //! Cleanup cart: collect items across drives, review them, then recycle or delete
 //! them in one go, with undo for recycled items.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -44,6 +44,19 @@ fn lower(p: &str) -> String {
 fn within(parent: &str, child: &str) -> bool {
     let (p, c) = (lower(parent), lower(child));
     c == p || c.starts_with(&format!("{}\\", p.trim_end_matches('\\')))
+}
+
+impl CartState {
+    /// Nodes of `tree` (drive `letter`) that are in the cart, found by path so they
+    /// survive a rescan.
+    pub fn nodes(&self, letter: char, tree: &bulk_core::tree::Tree) -> HashSet<NodeId> {
+        let items = self.items.lock().unwrap();
+        items
+            .iter()
+            .filter(|c| c.letter == letter)
+            .filter_map(|c| tree.find_path(&c.path))
+            .collect()
+    }
 }
 
 #[tauri::command]

@@ -28,6 +28,10 @@ pub mod tile_flags {
     pub const COLLAPSED: u8 = 4;
     /// Folder where much of the space is in items too small to draw.
     pub const MANY_SMALL: u8 = 8;
+    /// In the cleanup cart, or inside a folder that is. Set by the app, not the layout.
+    pub const IN_CART: u8 = 16;
+    /// The item that was added to the cart itself, as opposed to something inside it.
+    pub const CART_ROOT: u8 = 32;
 }
 
 #[derive(Clone, Copy, Debug)]

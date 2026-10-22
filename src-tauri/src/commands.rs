@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::os::windows::process::CommandExt;
 
 use bulk_core::helper;
@@ -7,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 
+use crate::cart::CartState;
 use crate::scan::{self, HelperState, HelperStatus, ScanEvent};
 use crate::state::{AppState, Row, row};
 
@@ -302,6 +304,7 @@ pub fn node_info(state: State<AppState>, letter: char, id: NodeId) -> Res<NodeIn
 #[tauri::command]
 pub fn treemap(
     state: State<AppState>,
+    cart: State<CartState>,
     letter: char,
     root: Option<NodeId>,
     width: f32,
@@ -330,10 +333,12 @@ pub fn treemap(
         // Names only for tiles big enough to show text.
         label: t.flags & tile_flags::HEADER != 0 || (t.rect.w >= 44.0 && t.rect.h >= 16.0),
     });
+    let carted = cart.nodes(letter, tree);
     Ok(tauri::ipc::Response::new(encode_shapes(
         tree,
         shapes,
         opts.use_alloc,
+        &carted,
     )))
 }
 
@@ -342,6 +347,7 @@ pub fn treemap(
 #[tauri::command]
 pub fn sunburst(
     state: State<AppState>,
+    cart: State<CartState>,
     letter: char,
     root: Option<NodeId>,
     depth: u8,
@@ -363,8 +369,9 @@ pub fn sunburst(
         category: a.category,
         label: a.a1 - a.a0 > 0.05,
     });
+    let carted = cart.nodes(letter, tree);
     Ok(tauri::ipc::Response::new(encode_shapes(
-        tree, shapes, use_alloc,
+        tree, shapes, use_alloc, &carted,
     )))
 }
 
@@ -379,7 +386,12 @@ struct Shape {
 
 /// `u32 count`, then per shape `f32 ×4; u32 id; u8 depth, flags, category, 0; u64 value`,
 /// then `u32 labels` and per label `u32 id; u16 len; utf-8 bytes`.
-fn encode_shapes(tree: &Tree, shapes: impl Iterator<Item = Shape>, use_alloc: bool) -> Vec<u8> {
+fn encode_shapes(
+    tree: &Tree,
+    shapes: impl Iterator<Item = Shape>,
+    use_alloc: bool,
+    carted: &HashSet<NodeId>,
+) -> Vec<u8> {
     let mut body = Vec::new();
     let mut labels = Vec::new();
     let mut count = 0u32;
@@ -390,7 +402,16 @@ fn encode_shapes(tree: &Tree, shapes: impl Iterator<Item = Shape>, use_alloc: bo
             body.extend_from_slice(&v.to_le_bytes());
         }
         body.extend_from_slice(&s.id.to_le_bytes());
-        body.extend_from_slice(&[s.depth, s.flags, s.category, 0]);
+        let mut flags = s.flags;
+        if !carted.is_empty() {
+            use bulk_core::layout::tile_flags::{CART_ROOT, IN_CART};
+            if carted.contains(&s.id) {
+                flags |= IN_CART | CART_ROOT;
+            } else if tree.ancestors(s.id).any(|a| carted.contains(&a)) {
+                flags |= IN_CART;
+            }
+        }
+        body.extend_from_slice(&[s.depth, flags, s.category, 0]);
         let n = tree.get(s.id);
         let value = if use_alloc { n.alloc } else { n.size };
         body.extend_from_slice(&value.to_le_bytes());
