@@ -20,13 +20,12 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use bulk_core::helper::{
-    self, Event, FRAME_TREE, PROTOCOL, ProgressInfo, Request, TASK_NAME, read_frame,
+    self, Event, FRAME_TREE, PROTOCOL, ProgressInfo, Request, SNAPSHOT_TASK, TASK_NAME, read_frame,
     write_frame_header, write_json,
 };
 use bulk_core::scan::{self, Progress};
 use bulk_core::{snapshot, usn};
 
-const SNAPSHOT_TASK: &str = r"Bulk\DailySnapshot";
 use windows_sys::Win32::Foundation::{
     CloseHandle, ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE, LocalFree,
 };

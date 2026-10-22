@@ -27,7 +27,18 @@ use crate::usn::{Change, Journal};
 use crate::wire;
 
 pub const PROTOCOL: u32 = 2;
-pub const TASK_NAME: &str = r"Bulk\Helper";
+/// Debug builds get their own task and pipe, so a dev build and an installed
+/// release can each keep a working helper.
+pub const TASK_NAME: &str = if cfg!(debug_assertions) {
+    r"Bulk\HelperDev"
+} else {
+    r"Bulk\Helper"
+};
+pub const SNAPSHOT_TASK: &str = if cfg!(debug_assertions) {
+    r"Bulk\DailySnapshotDev"
+} else {
+    r"Bulk\DailySnapshot"
+};
 pub const FRAME_EVENT: u8 = 0;
 pub const FRAME_TREE: u8 = 1;
 
@@ -187,7 +198,8 @@ pub fn current_user_sid() -> anyhow::Result<String> {
 }
 
 pub fn pipe_name(sid: &str) -> String {
-    format!(r"\\.\pipe\bulk-helper-{sid}")
+    let suffix = if cfg!(debug_assertions) { "-dev" } else { "" };
+    format!(r"\\.\pipe\bulk-helper-{sid}{suffix}")
 }
 
 /// Path of `bulk-helper.exe`, expected next to the running executable.
