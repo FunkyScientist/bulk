@@ -5,6 +5,7 @@
   import Sun from '@lucide/svelte/icons/sun';
   import Moon from '@lucide/svelte/icons/moon';
   import Monitor from '@lucide/svelte/icons/monitor';
+  import ShoppingCart from '@lucide/svelte/icons/shopping-cart';
   import { app } from '$lib/app.svelte';
 
   let { onSearch }: { onSearch?: () => void } = $props();
@@ -53,6 +54,25 @@
   </div>
 
   <div class="ml-auto flex h-full items-center">
+    <button
+      class="pressable relative mr-1 grid size-7 place-items-center rounded-md hover:bg-hover hover:text-fg {app
+        .cart.length
+        ? 'text-fg-muted'
+        : 'text-fg-subtle'}"
+      title="Cleanup cart"
+      aria-label="Cleanup cart, {app.cart.length} items"
+      onclick={() => (app.cartOpen = !app.cartOpen)}
+    >
+      {#key app.cartBump}
+        <span class="bump grid place-items-center"><ShoppingCart class="size-3.5" /></span>
+      {/key}
+      {#if app.cart.length}
+        <span
+          class="tabular absolute -top-0.5 -right-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-accent px-1 text-[9px] font-semibold text-accent-fg"
+          >{app.cart.length > 99 ? '99+' : app.cart.length}</span
+        >
+      {/if}
+    </button>
     <button
       class="pressable mr-1 grid size-7 place-items-center rounded-md text-fg-subtle hover:bg-hover hover:text-fg"
       title={themeLabel}
@@ -115,6 +135,14 @@
   .winbtn.close:hover {
     background: #c42b1c;
     color: white;
+  }
+  .bump {
+    animation: bump 420ms var(--ease-spring);
+  }
+  @keyframes bump {
+    30% {
+      transform: scale(1.35) rotate(-8deg);
+    }
   }
   .theme-icon {
     animation: spin-in 320ms var(--ease-spring);

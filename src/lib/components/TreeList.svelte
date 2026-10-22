@@ -8,6 +8,7 @@
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import { api, Flags, type Row, type SortKey } from '$lib/api';
   import { app } from '$lib/app.svelte';
+  import { nodeMenu } from '$lib/menus';
   import { ago, bytes, count, percent } from '$lib/format';
 
   let { letter }: { letter: string } = $props();
@@ -287,6 +288,11 @@
           aria-expanded={row?.dir ? row.open : undefined}
           tabindex="-1"
           onclick={() => row && select(row)}
+          oncontextmenu={(e) => {
+            if (!row) return;
+            select(row);
+            nodeMenu(e, letter, row.id);
+          }}
           ondblclick={() => row && open(row, i)}
           onkeydown={() => {}}
           onfocus={() => viewport.focus({ preventScroll: true })}

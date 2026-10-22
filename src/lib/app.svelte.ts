@@ -1,7 +1,30 @@
 import { listen } from '@tauri-apps/api/event';
-import { api, type Drive, type HelperStatus, type Progress, type SortKey } from './api';
+import type { Component } from 'svelte';
+import {
+  api,
+  type CartItem,
+  type Drive,
+  type HelperStatus,
+  type Progress,
+  type SortKey,
+} from './api';
 
 export type ThemePref = 'system' | 'dark' | 'light';
+
+export interface MenuItem {
+  label: string;
+  icon?: Component;
+  hint?: string;
+  danger?: boolean;
+  run: () => void;
+}
+
+export interface Toast {
+  id: number;
+  message: string;
+  tone?: 'ok' | 'error';
+  action?: { label: string; run: () => void };
+}
 
 export interface ScanState {
   method: 'mft' | 'walk' | null;
@@ -47,7 +70,14 @@ class AppState {
   revealRequest = $state<{ id: number; seq: number } | null>(null);
   visual = $state<'treemap' | 'sunburst'>(readPref('bulk.visual', 'treemap'));
   split = $state(Number(readPref('bulk.split', '0.5')) || 0.5);
-  tab = $state<'browse' | 'changes'>('browse');
+  tab = $state<'browse' | 'changes' | 'duplicates'>('browse');
+  cart = $state<CartItem[]>([]);
+  cartOpen = $state(false);
+  /** Bumped when something is added, so the cart button can bounce. */
+  cartBump = $state(0);
+  menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  toasts = $state<Toast[]>([]);
+  private toastSeq = 0;
   sidebarCollapsed = $state(readPref<'open' | 'collapsed'>('bulk.sidebar', 'open') === 'collapsed');
 
   drive = $derived(this.drives.find((d) => d.letter === this.current) ?? null);
@@ -65,6 +95,8 @@ class AppState {
     await listen<string>('drive-live', (e) => this.driveChanged(e.payload));
     // The change journal couldn't cover the gap since the last snapshot.
     await listen<string>('needs-rescan', (e) => void this.scan(e.payload));
+    await listen('cart-changed', async () => (this.cart = await api.cartGet()));
+    this.cart = await api.cartGet();
     const [drives, helper] = await Promise.all([api.drives(), api.helperStatus()]);
     this.drives = drives;
     if (this.helper === 'checking') this.helper = helper;
@@ -130,6 +162,47 @@ class AppState {
     const info = await api.nodeInfo(letter, id);
     this.setFocus(letter, info.parent === null || info.parent === 0 ? null : info.parent);
     this.selectNode(id, true);
+  }
+
+  toast(message: string, opts: Omit<Toast, 'id' | 'message'> & { ms?: number } = {}) {
+    const id = ++this.toastSeq;
+    this.toasts.push({ id, message, tone: opts.tone, action: opts.action });
+    setTimeout(() => this.dismissToast(id), opts.ms ?? (opts.action ? 7000 : 3200));
+  }
+
+  dismissToast(id: number) {
+    this.toasts = this.toasts.filter((t) => t.id !== id);
+  }
+
+  openMenu(e: MouseEvent, items: MenuItem[]) {
+    e.preventDefault();
+    this.menu = { x: e.clientX, y: e.clientY, items };
+  }
+
+  async addToCart(letter: string, ids: number[]) {
+    const before = this.cart.length;
+    this.cart = await api.cartAdd(letter, ids);
+    if (this.cart.length !== before || ids.length) {
+      this.cartBump++;
+      this.toast(
+        ids.length === 1 ? 'Added to cleanup cart' : `Added ${ids.length} items to cleanup cart`,
+        {
+          action: { label: 'Review', run: () => (this.cartOpen = true) },
+        },
+      );
+    }
+  }
+
+  async removeFromCart(paths: string[]) {
+    this.cart = await api.cartRemove(paths);
+  }
+
+  inCart(path: string) {
+    const p = path.toLowerCase();
+    return this.cart.some((c) => {
+      const cp = c.path.toLowerCase();
+      return p === cp || p.startsWith(cp.replace(/\\$/, '') + '\\');
+    });
   }
 
   /** Bumped to ask the visualisation to go up one level. */

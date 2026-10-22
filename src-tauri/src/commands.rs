@@ -453,6 +453,29 @@ pub async fn search(
     })
 }
 
+/// Open a file with its default app.
+#[tauri::command]
+pub fn open_path(path: String) -> Res<()> {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    let to_w = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+    let (verb, file) = (to_w("open"), to_w(&path));
+    let r = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            1, // SW_SHOWNORMAL
+        )
+    };
+    // Values above 32 mean success.
+    if r as usize <= 32 {
+        return Err(format!("couldn't open {path}"));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn show_in_explorer(path: String) -> Res<()> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;

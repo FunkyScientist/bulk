@@ -3,6 +3,8 @@
   import { fade } from 'svelte/transition';
   import { api, TileFlags, type NodeInfo, type Tiles } from '$lib/api';
   import { app } from '$lib/app.svelte';
+  import { nodeMenu } from '$lib/menus';
+  import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import { categoryColor } from '$lib/palette';
   import { bytes, percent } from '$lib/format';
 
@@ -360,7 +362,18 @@
     ondblclick={onDblClick}
     oncontextmenu={(e) => {
       e.preventDefault();
-      zoomOut();
+      onMove(e);
+      if (hover < 0 || !arcs) return zoomOut();
+      const id = arcs.id[hover];
+      app.selectNode(id, true);
+      nodeMenu(
+        e,
+        letter,
+        id,
+        focus === null
+          ? []
+          : [{ label: 'Zoom out', icon: ArrowUp, hint: 'Backspace', run: () => zoomOut() }],
+      );
     }}
   ></canvas>
 

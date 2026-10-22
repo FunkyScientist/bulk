@@ -10,6 +10,9 @@
   import Explorer from '$lib/components/Explorer.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import Shortcuts from '$lib/components/Shortcuts.svelte';
+  import ContextMenu from '$lib/components/ContextMenu.svelte';
+  import Toasts from '$lib/components/Toasts.svelte';
+  import CartPanel from '$lib/components/CartPanel.svelte';
 
   let palette = $state(false);
   let shortcuts = $state(false);
@@ -60,6 +63,9 @@
       shortcuts = !shortcuts;
     } else if (e.key === 'Escape' && shortcuts) {
       shortcuts = false;
+    } else if (e.key === 'Delete' && drive && app.selected !== null && app.selected !== 0) {
+      e.preventDefault();
+      app.addToCart(drive.letter, [app.selected]);
     } else if (e.key === 'Backspace' && drive) {
       e.preventDefault();
       app.zoomOut();
@@ -104,6 +110,9 @@
 
 <CommandPalette bind:open={palette} onShortcuts={() => (shortcuts = true)} />
 <Shortcuts bind:open={shortcuts} />
+<CartPanel />
+<ContextMenu />
+<Toasts />
 
 <style>
   .surface {

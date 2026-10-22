@@ -7,6 +7,7 @@ pub mod layout;
 pub mod scan;
 pub mod search;
 pub mod snapshot;
+pub mod trash;
 pub mod tree;
 pub mod usn;
 pub mod volume;

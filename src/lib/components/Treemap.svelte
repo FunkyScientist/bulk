@@ -3,6 +3,8 @@
   import { fade } from 'svelte/transition';
   import { api, TileFlags, type Tiles } from '$lib/api';
   import { app } from '$lib/app.svelte';
+  import { nodeMenu } from '$lib/menus';
+  import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import { categoryColor } from '$lib/palette';
   import { bytes, percent } from '$lib/format';
 
@@ -308,20 +310,20 @@
     return -1;
   }
 
-  function onMove(e: PointerEvent) {
+  function onMove(e: MouseEvent) {
     const r = overlay.getBoundingClientRect();
     mouse = { x: e.clientX - r.left, y: e.clientY - r.top };
     if (!animating) hover = hit(mouse.x, mouse.y);
   }
 
   function onClick(e: MouseEvent) {
-    onMove(e as PointerEvent);
+    onMove(e);
     if (hover < 0 || !tiles) return;
     app.selectNode(tiles.id[hover], true);
   }
 
   function onDblClick(e: MouseEvent) {
-    onMove(e as PointerEvent);
+    onMove(e);
     if (hover >= 0) zoomInto(hover);
   }
 
@@ -410,7 +412,18 @@
     ondblclick={onDblClick}
     oncontextmenu={(e) => {
       e.preventDefault();
-      zoomOut();
+      onMove(e);
+      if (hover < 0 || !tiles) return zoomOut();
+      const id = tiles.id[hover];
+      app.selectNode(id, true);
+      nodeMenu(
+        e,
+        letter,
+        id,
+        focus === null
+          ? []
+          : [{ label: 'Zoom out', icon: ArrowUp, hint: 'Backspace', run: () => zoomOut() }],
+      );
     }}
   ></canvas>
 

@@ -23,6 +23,7 @@
         ['←', 'Close folder / go to parent'],
         ['Enter', 'Show folder in the chart'],
         ['Shift Enter', 'Show in Explorer'],
+        ['Del', 'Add to cleanup cart'],
         ['Home / End', 'First / last row'],
       ],
     },
@@ -31,7 +32,7 @@
       keys: [
         ['Click', 'Select'],
         ['Double-click', 'Zoom in'],
-        ['Right-click', 'Zoom out'],
+        ['Right-click', 'Actions (empty space: zoom out)'],
         ['Backspace', 'Zoom out'],
       ],
     },

@@ -193,7 +193,36 @@ export interface SearchResult {
   hits: SearchHit[];
 }
 
+export interface CartItem {
+  letter: string;
+  id: number;
+  path: string;
+  name: string;
+  dir: boolean;
+  alloc: number;
+  files: number;
+}
+
+export interface DeleteResult {
+  freed: number;
+  deleted: number;
+  failed: { path: string; error: string }[];
+  undo: number | null;
+}
+
+export interface UndoResult {
+  restored: number;
+  failed: { path: string; error: string }[];
+  needsRescan: string[];
+}
+
 export const api = {
+  cartGet: () => invoke<CartItem[]>('cart_get'),
+  cartAdd: (letter: string, ids: number[]) => invoke<CartItem[]>('cart_add', { letter, ids }),
+  cartRemove: (paths: string[]) => invoke<CartItem[]>('cart_remove', { paths }),
+  cartClear: () => invoke<void>('cart_clear'),
+  cartDelete: (permanent: boolean) => invoke<DeleteResult>('cart_delete', { permanent }),
+  cartUndo: (id: number) => invoke<UndoResult>('cart_undo', { id }),
   search: (query: string, letter?: string) =>
     invoke<SearchResult>('search', { query, letter: letter ?? null }),
   history: (letter: string) => invoke<HistoryEntry[]>('history', { letter }),
@@ -229,5 +258,6 @@ export const api = {
   reveal: (letter: string, id: number) => invoke<number | null>('reveal', { letter, id }),
   nodePath: (letter: string, id: number) => invoke<string>('node_path', { letter, id }),
   showInExplorer: (path: string) => invoke<void>('show_in_explorer', { path }),
+  openPath: (path: string) => invoke<void>('open_path', { path }),
   backdrop: () => invoke<'mica' | 'solid'>('backdrop'),
 };

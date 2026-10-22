@@ -1,3 +1,4 @@
+mod cart;
 mod commands;
 mod history;
 mod live;
@@ -19,6 +20,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(state::AppState::default())
         .manage(scan::HelperState::default())
+        .manage(cart::CartState::default())
         .manage(settings::SettingsState(std::sync::Mutex::new(
             settings::load(),
         )))
@@ -48,11 +50,18 @@ pub fn run() {
             commands::node_info,
             commands::search,
             commands::show_in_explorer,
+            commands::open_path,
             commands::backdrop,
             history::history,
             history::diff_open,
             history::diff_children,
             history::diff_close,
+            cart::cart_get,
+            cart::cart_add,
+            cart::cart_remove,
+            cart::cart_clear,
+            cart::cart_delete,
+            cart::cart_undo,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Bulk");
