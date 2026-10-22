@@ -6,26 +6,67 @@ import { api } from './api';
 import { app, type MenuItem } from './app.svelte';
 
 const formats = {
-  html: { name: 'HTML report', ext: 'html', label: 'HTML report (shareable page)', icon: FileText },
-  csv: { name: 'CSV', ext: 'csv', label: 'CSV list of every file', icon: Sheet },
-  json: { name: 'JSON', ext: 'json', label: 'JSON folder tree', icon: Braces },
+  html: { name: 'HTML report', ext: 'html', icon: FileText },
+  csv: { name: 'CSV', ext: 'csv', icon: Sheet },
+  json: { name: 'JSON', ext: 'json', icon: Braces },
 } as const;
 
 type Format = keyof typeof formats;
 
-async function run(letter: string, format: Format) {
-  const root = app.focus[letter] ?? null;
+/** What each tab exports, and how its menu describes the formats. */
+const kinds = {
+  browse: {
+    file: '',
+    labels: {
+      html: 'HTML report (shareable page)',
+      csv: 'CSV list of every file',
+      json: 'JSON folder tree',
+    },
+  },
+  changes: {
+    file: ' changes',
+    labels: {
+      html: 'HTML report of the changes',
+      csv: 'CSV of every change',
+      json: 'JSON of every change',
+    },
+  },
+  duplicates: {
+    file: ' duplicates',
+    labels: {
+      html: 'HTML report of the duplicates',
+      csv: 'CSV of every duplicate file',
+      json: 'JSON of the duplicate sets',
+    },
+  },
+} as const;
+
+type Kind = keyof typeof kinds;
+
+/** Whether the current tab has anything to export. */
+export function canExport(letter: string): boolean {
+  if (app.tab === 'changes') return app.diffView?.letter === letter && app.diffView.items > 0;
+  if (app.tab === 'duplicates') return (app.dupes[letter]?.groups.length ?? 0) > 0;
+  return true;
+}
+
+async function run(letter: string, kind: Kind, format: Format) {
   const f = formats[format];
   const stamp = new Date().toISOString().slice(0, 10);
   const path = await save({
     title: `Export ${f.name}`,
-    defaultPath: `Bulk ${letter} ${stamp}.${f.ext}`,
+    defaultPath: `Bulk ${letter}${kinds[kind].file} ${stamp}.${f.ext}`,
     filters: [{ name: f.name, extensions: [f.ext] }],
   });
   if (!path) return;
   app.toast(`Exporting ${f.name}…`, { ms: 1500 });
   try {
-    await api.export(letter, root, format, path);
+    if (kind === 'changes')
+      await api.exportChanges(letter, app.diffView?.scope ?? null, format, path);
+    else if (kind === 'duplicates') {
+      const d = app.dupes[letter];
+      await api.exportDupes(d.scope, d.groups, format, path);
+    } else await api.export(letter, app.focus[letter] ?? null, format, path);
     app.toast(`Saved ${path.slice(path.lastIndexOf('\\') + 1)}`, {
       tone: 'ok',
       action:
@@ -38,12 +79,14 @@ async function run(letter: string, format: Format) {
   }
 }
 
-/** Menu for the Export button. Exports the folder shown in the chart, or the drive. */
+/** Menu for the Export button: the folder shown in the chart, or what the Changes or
+ * Duplicates tab is showing. */
 export function exportMenu(e: MouseEvent, letter: string) {
+  const kind: Kind = app.tab;
   const items: MenuItem[] = (Object.keys(formats) as Format[]).map((k) => ({
-    label: formats[k].label,
+    label: kinds[kind].labels[k],
     icon: formats[k].icon,
-    run: () => run(letter, k),
+    run: () => run(letter, kind, k),
   }));
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
   app.openMenu(

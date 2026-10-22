@@ -4,6 +4,9 @@
 use std::fmt::Write as _;
 use std::io::{BufWriter, Write};
 
+use serde::{Deserialize, Serialize};
+
+use crate::diff;
 use crate::layout::{self, TreemapOptions, category, tile_flags};
 use crate::tree::{NodeId, SortKey, Tree, flags};
 
@@ -401,7 +404,7 @@ pub fn write_html(
         logo = LOGO,
         title = esc(title),
         path = esc(&tree.path(root)),
-        date = iso(generated).replace('T', " ").trim_end_matches('Z'),
+        date = iso(generated).replace('T', " ").replace('Z', " UTC"),
         size = human(r.alloc),
         count = thousands(r.files as u64),
         folder_count = thousands(folder_count),
@@ -409,6 +412,298 @@ pub fn write_html(
         folders = list(&folders),
         file_rows = list(&files),
     )?;
+    w.flush()
+}
+
+/// One changed file or folder in a "what changed" export.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRow {
+    pub path: String,
+    pub status: diff::Status,
+    pub dir: bool,
+    pub old_alloc: u64,
+    pub new_alloc: u64,
+    pub delta: i64,
+    pub old_files: u32,
+    pub new_files: u32,
+}
+
+/// Everything that changed under a folder, depth first, biggest change first within
+/// each folder. Stops after `limit` rows.
+pub fn collect_changes(
+    old: &Tree,
+    new: &Tree,
+    old_root: Option<NodeId>,
+    new_root: NodeId,
+    limit: usize,
+) -> Vec<ChangeRow> {
+    let mut out = Vec::new();
+    let base = new.path(new_root);
+    let mut stack = vec![(old_root, Some(new_root), base)];
+    while let Some((o, n, path)) = stack.pop() {
+        let items = diff::children(old, new, o, n, usize::MAX);
+        // Reverse so the biggest change is visited (and written) first.
+        for it in items.into_iter().rev() {
+            let child = format!("{}\\{}", path.trim_end_matches('\\'), it.name);
+            if it.dir && it.has_kids {
+                stack.push((it.old_id, it.new_id, child.clone()));
+            }
+            out.push(ChangeRow {
+                path: child,
+                status: it.status,
+                dir: it.dir,
+                old_alloc: it.old_alloc,
+                new_alloc: it.new_alloc,
+                delta: it.delta,
+                old_files: it.old_files,
+                new_files: it.new_files,
+            });
+        }
+        if out.len() >= limit {
+            out.truncate(limit);
+            break;
+        }
+    }
+    // Depth-first order with each folder's own row ahead of its contents.
+    out.sort_by(|a, b| a.path.to_ascii_lowercase().cmp(&b.path.to_ascii_lowercase()));
+    out
+}
+
+fn status_word(s: diff::Status) -> &'static str {
+    match s {
+        diff::Status::Added => "added",
+        diff::Status::Removed => "removed",
+        diff::Status::Changed => "changed",
+    }
+}
+
+pub fn write_changes_csv(rows: &[ChangeRow], out: impl Write) -> std::io::Result<()> {
+    let mut w = BufWriter::new(out);
+    w.write_all(
+        "\u{feff}path,type,status,size_on_disk_before,size_on_disk_after,change,files_before,files_after\r\n"
+            .as_bytes(),
+    )?;
+    for r in rows {
+        writeln!(
+            w,
+            "{},{},{},{},{},{},{},{}\r",
+            csv_field(&r.path),
+            if r.dir { "folder" } else { "file" },
+            status_word(r.status),
+            r.old_alloc,
+            r.new_alloc,
+            r.delta,
+            r.old_files,
+            r.new_files
+        )?;
+    }
+    w.flush()
+}
+
+/// Header facts shared by the change exports.
+pub struct ChangeSummary<'a> {
+    pub scope: &'a str,
+    pub since: u32,
+    pub generated: u32,
+    pub old_alloc: u64,
+    pub new_alloc: u64,
+    pub old_files: u32,
+    pub new_files: u32,
+}
+
+pub fn write_changes_json(
+    s: &ChangeSummary,
+    rows: &[ChangeRow],
+    out: impl Write,
+) -> std::io::Result<()> {
+    let mut w = BufWriter::new(out);
+    let v = serde_json::json!({
+        "scope": s.scope,
+        "since": iso(s.since),
+        "generated": iso(s.generated),
+        "sizeOnDiskBefore": s.old_alloc,
+        "sizeOnDiskAfter": s.new_alloc,
+        "filesBefore": s.old_files,
+        "filesAfter": s.new_files,
+        "changes": rows,
+    });
+    serde_json::to_writer_pretty(&mut w, &v)?;
+    w.flush()
+}
+
+fn signed(n: i64) -> String {
+    match n.cmp(&0) {
+        std::cmp::Ordering::Equal => "±0 B".into(),
+        std::cmp::Ordering::Greater => format!("+{}", human(n as u64)),
+        std::cmp::Ordering::Less => format!("−{}", human(n.unsigned_abs())),
+    }
+}
+
+const LIST_CSS: &str = r#"
+.up{color:#e5405e}.down{color:#17a67b}
+@media (prefers-color-scheme:dark){.up{color:#ff6b81}.down{color:#3fd0a4}}
+.tag{display:inline-block;margin-left:8px;padding:0 6px;border-radius:4px;font-size:11px;font-weight:500;vertical-align:1px}
+.tag.added{background:rgba(229,64,94,.12);color:#e5405e}.tag.removed{background:rgba(23,166,123,.12);color:#17a67b}
+.set{padding:12px 0;border-top:1px solid var(--line)}.set:first-child{border-top:0;padding-top:0}
+.set h3{display:flex;gap:10px;align-items:baseline;margin:0 0 6px;font-size:14px;font-weight:600}
+.set h3 small{color:var(--subtle);font-weight:400;font-size:12px}.set h3 em{margin-left:auto;font-style:normal;font-size:12.5px}
+.set div{display:flex;gap:12px;padding:3px 0;font-size:12.5px;color:var(--muted)}.set div span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.set div span:last-child{margin-left:auto;flex:none;color:var(--subtle)}
+"#;
+
+fn page(title: &str, subtitle: &str, stats: &str, body: &str) -> String {
+    format!(
+        r#"<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{t} · Bulk report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>{css}{list}</style></head><body><main>
+<div class="brand">{logo}Bulk report</div>
+<header><div><h1>{t}</h1><div class="path mono">{sub}</div></div></header>
+<section class="stats">{stats}</section>
+{body}
+<footer><span>Made with Bulk</span></footer></main></body></html>"#,
+        t = esc(title),
+        sub = esc(subtitle),
+        css = REPORT_CSS,
+        list = LIST_CSS,
+        logo = LOGO,
+    )
+}
+
+fn stat(label: &str, value: &str, class: &str) -> String {
+    format!(r#"<div class="stat"><span>{label}</span><b class="num {class}">{value}</b></div>"#)
+}
+
+/// A shareable page of what changed: totals, then the biggest changes. Folders that
+/// merely contain changes are left out of the list, since their files are in it.
+pub fn write_changes_html(
+    s: &ChangeSummary,
+    rows: &[ChangeRow],
+    out: impl Write,
+) -> std::io::Result<()> {
+    let delta = s.new_alloc as i64 - s.old_alloc as i64;
+    let files = s.new_files as i64 - s.old_files as i64;
+    let mut stats = String::new();
+    stats += &stat("Change", &signed(delta), if delta > 0 { "up" } else { "down" });
+    stats += &stat("Now", &human(s.new_alloc), "");
+    stats += &stat("Then", &human(s.old_alloc), "");
+    stats += &stat(
+        "Files",
+        &format!("{}{}", if files >= 0 { "+" } else { "−" }, thousands(files.unsigned_abs())),
+        "",
+    );
+
+    let mut list: Vec<&ChangeRow> = rows
+        .iter()
+        .filter(|r| !r.dir || r.status != diff::Status::Changed)
+        .collect();
+    list.sort_by(|a, b| b.delta.unsigned_abs().cmp(&a.delta.unsigned_abs()));
+    list.truncate(300);
+    let max = list.first().map_or(1, |r| r.delta.unsigned_abs().max(1));
+    let mut items = String::new();
+    for (i, r) in list.iter().enumerate() {
+        let (dir, name) = r.path.rsplit_once('\\').unwrap_or(("", &r.path));
+        let tag = match r.status {
+            diff::Status::Added => r#"<span class="tag added">New</span>"#,
+            diff::Status::Removed => r#"<span class="tag removed">Deleted</span>"#,
+            diff::Status::Changed => "",
+        };
+        let _ = write!(
+            items,
+            r#"<li><span class="rank num">{rank}</span><span class="name" title="{path}">{name}{tag}</span><span class="size num {cls}">{d}</span><span class="where mono" title="{path}">{dir}</span><span class="pct num">{a} → {b}</span><span class="bar"><span style="width:{w:.1}%;background:{color}"></span></span></li>"#,
+            rank = i + 1,
+            path = esc(&r.path),
+            name = esc(name),
+            dir = esc(dir),
+            cls = if r.delta > 0 { "up" } else { "down" },
+            d = signed(r.delta),
+            a = human(r.old_alloc),
+            b = human(r.new_alloc),
+            w = r.delta.unsigned_abs() as f64 / max as f64 * 100.0,
+            color = if r.delta > 0 { "#e5405e" } else { "#17a67b" },
+        );
+    }
+    let body = format!(
+        r#"<section class="card"><h2>Biggest changes <small>{n} items</small></h2><ol>{items}</ol></section>"#,
+        n = thousands(list.len() as u64),
+    );
+    let since = iso(s.since).replace('T', " ");
+    let subtitle = format!("{} · since {}", s.scope, since.replace('Z', " UTC"));
+    let mut w = BufWriter::new(out);
+    w.write_all(page("What changed", &subtitle, &stats, &body).as_bytes())?;
+    w.flush()
+}
+
+/// A set of identical files for the duplicates export.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DupeSet {
+    pub size: u64,
+    pub files: Vec<DupeFile>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DupeFile {
+    pub path: String,
+    pub mtime: u32,
+}
+
+pub fn write_dupes_csv(sets: &[DupeSet], out: impl Write) -> std::io::Result<()> {
+    let mut w = BufWriter::new(out);
+    w.write_all("\u{feff}set,path,size,modified\r\n".as_bytes())?;
+    for (i, s) in sets.iter().enumerate() {
+        for f in &s.files {
+            writeln!(w, "{},{},{},{}\r", i + 1, csv_field(&f.path), s.size, iso(f.mtime))?;
+        }
+    }
+    w.flush()
+}
+
+pub fn write_dupes_json(scope: &str, sets: &[DupeSet], out: impl Write) -> std::io::Result<()> {
+    let mut w = BufWriter::new(out);
+    let wasted: u64 = sets.iter().map(|s| s.size * (s.files.len() as u64 - 1)).sum();
+    let v = serde_json::json!({ "scope": scope, "extraBytes": wasted, "sets": sets });
+    serde_json::to_writer_pretty(&mut w, &v)?;
+    w.flush()
+}
+
+pub fn write_dupes_html(scope: &str, sets: &[DupeSet], out: impl Write) -> std::io::Result<()> {
+    let wasted: u64 = sets.iter().map(|s| s.size * (s.files.len() as u64 - 1)).sum();
+    let copies: usize = sets.iter().map(|s| s.files.len()).sum();
+    let mut stats = String::new();
+    stats += &stat("In extra copies", &human(wasted), "up");
+    stats += &stat("Sets", &thousands(sets.len() as u64), "");
+    stats += &stat("Files", &thousands(copies as u64), "");
+    let mut body = String::new();
+    for s in sets {
+        let first = &s.files[0].path;
+        let name = first.rsplit_once('\\').map_or(first.as_str(), |(_, n)| n);
+        let _ = write!(
+            body,
+            r#"<div class="set"><h3>{name}<small>{n} copies of {size}</small><em class="up num">{extra} extra</em></h3>"#,
+            name = esc(name),
+            n = s.files.len(),
+            size = human(s.size),
+            extra = human(s.size * (s.files.len() as u64 - 1)),
+        );
+        for f in &s.files {
+            let date = iso(f.mtime).replace('T', " ");
+            let _ = write!(
+                body,
+                r#"<div><span class="mono" title="{p}">{p}</span><span class="num">{d}</span></div>"#,
+                p = esc(&f.path),
+                d = date.replace('Z', " UTC"),
+            );
+        }
+        body.push_str("</div>");
+    }
+    let body = format!(r#"<section class="card"><h2>Duplicate sets</h2>{body}</section>"#);
+    let mut w = BufWriter::new(out);
+    w.write_all(page("Duplicate files", scope, &stats, &body).as_bytes())?;
     w.flush()
 }
 
@@ -433,6 +728,22 @@ mod tests {
         let s = String::from_utf8(out).unwrap();
         assert_eq!(s.lines().count(), 5);
         assert!(s.contains("\"C:\\My, \"\"Docs\"\"\\a.mp4\",file,100,4096,1,2023-11-14T22:13:20Z"));
+    }
+
+    #[test]
+    fn changes_cover_nested_files() {
+        let old = sample();
+        let mut new = sample();
+        let docs = new.find_path("C:\\My, \"Docs\"").unwrap();
+        new.add(docs, "new.pdf", 0, 10, 4096, 0, 0);
+        new.aggregate();
+        let rows = collect_changes(&old, &new, Some(old.root), new.root, 100);
+        let paths: Vec<_> = rows.iter().map(|r| r.path.as_str()).collect();
+        assert_eq!(paths, ["C:\\My, \"Docs\"", "C:\\My, \"Docs\"\\new.pdf"]);
+        assert_eq!(rows[1].status, diff::Status::Added);
+        let mut csv = Vec::new();
+        write_changes_csv(&rows, &mut csv).unwrap();
+        assert!(String::from_utf8(csv).unwrap().contains("new.pdf\",file,added,0,4096,4096"));
     }
 
     #[test]

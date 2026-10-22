@@ -4,6 +4,7 @@ import {
   api,
   type CartItem,
   type DeleteResult,
+  type DupeGroup,
   type Drive,
   type HelperStatus,
   type Progress,
@@ -243,6 +244,13 @@ class AppState {
     await navigator.clipboard.writeText(path);
     this.toast('Path copied');
   }
+
+  /** What the Changes tab is showing, for Export (null when there's nothing). */
+  diffView = $state<{ letter: string; scope: number | null; items: number } | null>(null);
+  /** Last duplicate search per drive; kept so switching tabs doesn't lose it. */
+  dupes = $state<
+    Record<string, { groups: DupeGroup[]; scope: string; meta: { ms: number; candidates: number } }>
+  >({});
 
   /** Asks for confirmation before deleting a node (Shift+Del, right-click → Delete). */
   deleteRequest = $state<{ letter: string; id: number } | null>(null);

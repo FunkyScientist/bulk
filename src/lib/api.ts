@@ -345,5 +345,13 @@ export const api = {
   openPath: (path: string) => invoke<void>('open_path', { path }),
   export: (letter: string, root: number | null, format: 'html' | 'csv' | 'json', path: string) =>
     invoke<void>('export', { letter, root, format, path }),
+  exportChanges: (
+    letter: string,
+    folder: number | null,
+    format: 'html' | 'csv' | 'json',
+    path: string,
+  ) => invoke<void>('export_changes', { letter, folder, format, path }),
+  exportDupes: (scope: string, sets: DupeGroup[], format: 'html' | 'csv' | 'json', path: string) =>
+    invoke<void>('export_dupes', { scope, sets, format, path }),
   backdrop: () => invoke<'mica' | 'solid'>('backdrop'),
 };

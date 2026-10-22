@@ -16,7 +16,7 @@
   import CopyIcon from '@lucide/svelte/icons/copy';
   import DupesView from './DupesView.svelte';
   import Share from '@lucide/svelte/icons/share';
-  import { exportMenu } from '$lib/exporting';
+  import { canExport, exportMenu } from '$lib/exporting';
   import { api } from '$lib/api';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import FolderSync from '@lucide/svelte/icons/folder-sync';
@@ -164,8 +164,17 @@
         </span>
       {/if}
       <button
-        class="pressable flex h-7 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[12px] text-fg-muted hover:border-line-strong hover:text-fg"
-        title="Export the folder shown in the chart"
+        class="pressable flex h-7 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[12px] text-fg-muted hover:border-line-strong hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+        disabled={!canExport(drive.letter)}
+        title={app.tab === 'changes'
+          ? canExport(drive.letter)
+            ? 'Export these changes'
+            : 'Nothing changed to export'
+          : app.tab === 'duplicates'
+            ? canExport(drive.letter)
+              ? 'Export these duplicates'
+              : 'Find duplicates first'
+            : 'Export the folder shown in the chart'}
         onclick={(e) => exportMenu(e, drive.letter)}
       >
         <Share class="size-3.5" /> Export

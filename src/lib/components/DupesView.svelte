@@ -24,8 +24,12 @@
   let folderName = $state('');
   let running = $state(false);
   let progress = $state<Extract<DupesEvent, { type: 'progress' }> | null>(null);
-  let groups = $state<DupeGroup[] | null>(null);
-  let meta = $state<{ ms: number; candidates: number } | null>(null);
+  // Results survive switching tabs.
+  const kept = untrack(() => app.dupes[letter]);
+  let groups = $state<DupeGroup[] | null>(kept?.groups ?? null);
+  let meta = $state<{ ms: number; candidates: number } | null>(kept?.meta ?? null);
+  let scopePath = $state(kept?.scope ?? '');
+  let folderPath = $state('');
   let error = $state('');
   /** Selected file paths (to add to the cart). */
   let picked = $state<Record<string, boolean>>({});
@@ -33,8 +37,12 @@
   const focus = $derived(app.focus[letter] ?? null);
   $effect(() => {
     const id = focus;
-    if (id === null) folderName = '';
-    else api.nodeInfo(letter, id).then((i) => (folderName = i.name));
+    if (id === null) folderName = folderPath = '';
+    else
+      api.nodeInfo(letter, id).then((i) => {
+        folderName = i.name;
+        folderPath = i.path;
+      });
   });
   const wasted = $derived((groups ?? []).reduce((s, g) => s + g.size * (g.files.length - 1), 0));
   const pickedList = $derived(
@@ -50,6 +58,7 @@
     error = '';
     picked = {};
     progress = null;
+    const scope = inFolder && focus !== null ? folderPath : `${letter}:\\`;
     await api.dupesStart(letter, inFolder ? focus : null, minSize, skipSystem, (e) => {
       if (e.type === 'cancelled') running = false;
       if (e.type === 'progress') progress = e;
@@ -58,6 +67,8 @@
         if (e.type === 'done') {
           groups = e.groups;
           meta = { ms: e.elapsedMs, candidates: e.candidates };
+          scopePath = scope;
+          app.dupes[letter] = { groups: e.groups, scope, meta };
         }
       }
     });
@@ -134,7 +145,11 @@
         disabled={running || focus === null}
         class="accent-[var(--accent)]"
       />
-      {focus === null ? 'Only the open folder' : `Only ${folderName || 'the open folder'}`}
+      <span class="max-w-[360px] truncate" title={folderPath}>
+        {focus === null
+          ? 'Only the open folder'
+          : `Only ${folderPath || folderName || 'the open folder'}`}
+      </span>
     </label>
     <div class="ml-auto">
       {#if running}
@@ -202,7 +217,8 @@
         <div class="tabular text-[11.5px] text-fg-subtle">
           {count(groups.length)} sets · checked {count(meta?.candidates ?? 0)} files in {duration(
             meta?.ms ?? 0,
-          )}
+          )}{#if scopePath}
+            · in <span class="mono" title={scopePath}>{scopePath}</span>{/if}
         </div>
       </div>
       {#if groups.length}

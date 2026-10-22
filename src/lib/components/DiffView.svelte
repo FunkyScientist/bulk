@@ -71,7 +71,15 @@
     });
   });
 
-  onDestroy(() => void api.diffClose(letter));
+  onDestroy(() => {
+    app.diffView = null;
+    void api.diffClose(letter);
+  });
+
+  // Tell Export what's on screen.
+  $effect(() => {
+    app.diffView = summary && !loading ? { letter, scope, items: rows.length } : null;
+  });
 
   async function choose(path: string) {
     chosen = path;
@@ -207,8 +215,8 @@
                 onclick={() => setScope(null)}>Show whole drive</button
               >
             {:else}
-              <span class="flex items-center gap-1.5 text-fg-muted">
-                <HardDrive class="size-3.5" /> Whole drive
+              <span class="flex items-center gap-1.5 text-fg-muted" title={summary.scope}>
+                <HardDrive class="size-3.5" /> Whole drive ({summary.scope})
               </span>
               {#if opened !== null}
                 <button

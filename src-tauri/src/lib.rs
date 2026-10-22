@@ -63,6 +63,8 @@ pub fn run() {
             history::history,
             history::diff_open,
             history::diff_scope,
+            history::export_changes,
+            history::export_dupes,
             history::diff_children,
             history::diff_close,
             cart::cart_get,

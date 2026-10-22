@@ -61,7 +61,7 @@ pub struct DiffSummary {
 
 /// Totals for `folder` (the whole drive when `None`) now and in the snapshot. The
 /// snapshot's ids differ from the live tree's, so the folder is matched by path.
-fn summarize(
+pub(crate) fn summarize(
     taken: u64,
     old: &bulk_core::Tree,
     new: &bulk_core::Tree,
@@ -129,6 +129,75 @@ pub fn diff_scope(
     let new = d.tree.as_ref().ok_or("not scanned")?;
     let (meta, old) = d.diff.as_ref().ok_or("no snapshot loaded")?;
     Ok(summarize(meta.taken, old, new, folder))
+}
+
+/// Write the loaded comparison, scoped to `folder`, to `path` (chosen by the user).
+#[tauri::command]
+pub async fn export_changes(
+    state: State<'_, AppState>,
+    letter: char,
+    folder: Option<NodeId>,
+    format: crate::commands::ExportFormat,
+    path: PathBuf,
+) -> Res<()> {
+    use bulk_core::export::{self, ChangeSummary};
+    use crate::commands::ExportFormat;
+    // Collect under the lock (it's quick); write the file without it.
+    let (summary, rows) = {
+        let drives = state.drives.lock().unwrap();
+        let d = drives.get(&letter).ok_or("unknown drive")?;
+        let new = d.tree.as_ref().ok_or("not scanned")?;
+        let (meta, old) = d.diff.as_ref().ok_or("no snapshot loaded")?;
+        let s = summarize(meta.taken, old, new, folder);
+        let rows = export::collect_changes(old, new, s.old_root, s.new_root, 500_000);
+        (s, rows)
+    };
+    tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<()> {
+        let file = std::fs::File::create(&path)?;
+        let facts = ChangeSummary {
+            scope: &summary.scope,
+            since: summary.taken as u32,
+            generated: crate::scan::now() as u32,
+            old_alloc: summary.old_alloc,
+            new_alloc: summary.new_alloc,
+            old_files: summary.old_files,
+            new_files: summary.new_files,
+        };
+        match format {
+            ExportFormat::Csv => export::write_changes_csv(&rows, file)?,
+            ExportFormat::Json => export::write_changes_json(&facts, &rows, file)?,
+            ExportFormat::Html => export::write_changes_html(&facts, &rows, file)?,
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
+}
+
+/// Write duplicate sets found by the duplicate finder to `path`.
+#[tauri::command]
+pub async fn export_dupes(
+    scope: String,
+    sets: Vec<bulk_core::export::DupeSet>,
+    format: crate::commands::ExportFormat,
+    path: PathBuf,
+) -> Res<()> {
+    use bulk_core::export;
+    use crate::commands::ExportFormat;
+    let sets: Vec<_> = sets.into_iter().filter(|s| s.files.len() > 1).collect();
+    tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<()> {
+        let file = std::fs::File::create(&path)?;
+        match format {
+            ExportFormat::Csv => export::write_dupes_csv(&sets, file)?,
+            ExportFormat::Json => export::write_dupes_json(&scope, &sets, file)?,
+            ExportFormat::Html => export::write_dupes_html(&scope, &sets, file)?,
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
