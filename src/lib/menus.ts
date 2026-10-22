@@ -39,7 +39,12 @@ export async function nodeMenu(e: MouseEvent, letter: string, id: number, extra:
     });
   else items.push({ label: 'Open', icon: ExternalLink, run: () => api.openPath(info.path) });
   items.push(
-    { label: 'Show in Explorer', icon: FolderOpen, run: () => api.showInExplorer(info.path) },
+    {
+      label: 'Show in Explorer',
+      icon: FolderOpen,
+      hint: 'Ctrl E',
+      run: () => api.showInExplorer(info.path),
+    },
     {
       label: 'Copy path',
       icon: Copy,

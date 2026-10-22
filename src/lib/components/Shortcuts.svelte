@@ -11,6 +11,7 @@
         ['Ctrl K', 'Search and commands'],
         ['Ctrl R', 'Rescan drive'],
         ['Ctrl B', 'Collapse sidebar'],
+        ['Ctrl E', 'Show selection in Explorer'],
         ['Ctrl 1 / 2', 'Treemap / sunburst'],
         ['?', 'This list'],
       ],

@@ -58,6 +58,10 @@
     } else if ((ctrl && key === 'r') || e.key === 'F5') {
       e.preventDefault();
       if (drive) app.scan(drive.letter);
+    } else if (ctrl && key === 'e' && drive && app.selected !== null) {
+      e.preventDefault();
+      const letter = drive.letter;
+      api.nodePath(letter, app.selected).then((p) => api.showInExplorer(p));
     } else if (ctrl && key === '1') {
       e.preventDefault();
       app.setVisual('treemap');
