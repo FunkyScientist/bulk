@@ -122,6 +122,10 @@ impl View {
 
     /// Expand every ancestor of `id` so it becomes visible.
     pub fn reveal(&mut self, tree: &Tree, id: NodeId) -> Option<usize> {
+        // A stale id from another drive, or from before a rescan.
+        if id as usize >= tree.len() {
+            return None;
+        }
         let mut changed = false;
         for a in tree.ancestors(id) {
             changed |= self.expanded.insert(a);

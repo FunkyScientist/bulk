@@ -154,6 +154,8 @@ class AppState {
     if (this.current === letter) return;
     this.current = letter;
     this.selected = null;
+    // Node ids belong to one drive; don't let the new drive's list act on them.
+    this.revealRequest = null;
     this.rowsVersion++;
   }
 
