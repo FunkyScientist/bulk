@@ -329,6 +329,24 @@ class AppState {
       startedAt: Date.now(),
       folder: folder?.name,
     };
+    // A whole-drive scan builds a new tree with new ids, so remember the open
+    // folder and the selection by path and find them again afterwards.
+    const pathOf = (id: number | null | undefined) =>
+      id == null ? Promise.resolve(null) : api.nodePath(letter, id).catch(() => null);
+    const kept = folder
+      ? null
+      : Promise.all([
+          pathOf(this.focus[letter]),
+          pathOf(this.current === letter ? this.selected : null),
+        ]);
+    const restore = async () => {
+      if (!kept) return;
+      const [focusPath, selPath] = await kept;
+      const find = (p: string | null) => (p ? api.findPath(letter, p) : Promise.resolve(null));
+      const [focus, sel] = await Promise.all([find(focusPath), find(selPath)]);
+      this.focus[letter] = focus === 0 ? null : focus;
+      return this.current === letter ? sel : null;
+    };
     return new Promise((resolve) => {
       api
         .scan(letter, folder?.id ?? null, async (e) => {
@@ -349,9 +367,14 @@ class AppState {
               break;
             case 'done':
               s.finished = { elapsedMs: e.elapsedMs, files: e.files };
+              const sel = await restore();
               await api.setSort(letter, this.sort);
               await this.refreshDrives();
               if (letter === this.current) this.rowsVersion++;
+              if (kept && letter === this.current) {
+                if (sel != null) this.selectNode(sel, true);
+                else this.selected = null;
+              }
               setTimeout(() => {
                 if (this.scans[letter]?.finished) delete this.scans[letter];
               }, 2600);
