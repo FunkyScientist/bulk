@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FilterChip from './FilterChip.svelte';
   import { onDestroy, untrack } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -68,6 +69,21 @@
       const pool = same.length ? same : h;
       const pick = pool.find((e) => e.taken < hourAgo) ?? pool[pool.length - 1];
       if (pick) choose(pick.path);
+    });
+  });
+
+  // The Browse filter applies here too: reload when it changes.
+  let filterSeen: string | null | undefined = undefined;
+  $effect(() => {
+    const q = app.filters[letter]?.query ?? null;
+    if (filterSeen === undefined) {
+      filterSeen = q;
+      return;
+    }
+    if (q === filterSeen) return;
+    filterSeen = q;
+    untrack(() => {
+      if (summary && !loading) void setScope(scope);
     });
   });
 
@@ -202,6 +218,7 @@
             )}
           </div>
           <div class="mt-1.5 flex items-center gap-2 text-[12px]">
+            <FilterChip {letter} />
             {#if scope !== null}
               <span
                 class="flex min-w-0 items-center gap-1.5 rounded-md bg-accent-soft px-2 py-0.5 text-fg"

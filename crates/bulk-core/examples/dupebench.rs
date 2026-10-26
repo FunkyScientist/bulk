@@ -13,7 +13,7 @@ fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|| r"C:\Users".into());
     let t0 = Instant::now();
     let tree = scan::walk::walk(&folder, 4096, &Progress::default())?;
-    let cands = dupes::candidates(&tree, tree.root, 1 << 20, true);
+    let cands = dupes::candidates(&tree, tree.root, 1 << 20, true, None);
     println!(
         "walk + list: {:.2}s, {} candidates",
         t0.elapsed().as_secs_f64(),

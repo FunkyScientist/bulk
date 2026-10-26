@@ -36,6 +36,8 @@ pub struct Drive {
     pub watch: Option<Arc<AtomicBool>>,
     /// Older snapshot loaded for the "what changed" view.
     pub diff: Option<(Meta, Tree)>,
+    /// The Browse filter applied to `diff`'s snapshot.
+    pub diff_filter: Option<Filter>,
 }
 
 impl Drive {
@@ -52,6 +54,28 @@ impl Drive {
             dirty: false,
             watch: None,
             diff: None,
+            diff_filter: None,
+        }
+    }
+
+    /// Bring `diff_filter` in line with the Browse filter.
+    pub fn sync_diff_filter(&mut self) {
+        let want = self.view.filter.as_ref().map(|f| f.query.clone());
+        let have = self.diff_filter.as_ref().map(|f| f.query.clone());
+        if want == have {
+            return;
+        }
+        self.diff_filter = match (want, &self.diff) {
+            (Some(q), Some((_, old))) => Some(Filter::new(old, &q, crate::scan::now())),
+            _ => None,
+        };
+    }
+
+    /// Filters for comparing against the loaded snapshot.
+    pub fn diff_filters(&self) -> bulk_core::diff::Filters<'_> {
+        bulk_core::diff::Filters {
+            old: self.diff_filter.as_ref(),
+            new: self.view.filter.as_ref(),
         }
     }
 

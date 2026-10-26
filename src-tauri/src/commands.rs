@@ -700,7 +700,7 @@ pub async fn export(
         let root = root
             .filter(|&r| (r as usize) < tree.len())
             .unwrap_or(tree.root);
-        let title = if root == tree.root {
+        let mut title = if root == tree.root {
             format!(
                 "{letter}: {}",
                 if d.vol.label.is_empty() {
@@ -712,7 +712,18 @@ pub async fn export(
         } else {
             tree.name(root).to_string()
         };
-        (tree.clone(), root, title)
+        // With a Browse filter, export just what it shows.
+        match &d.view.filter {
+            Some(f) => {
+                let copy = f.to_tree(tree);
+                let root = copy
+                    .find_path(&tree.path(root))
+                    .ok_or("nothing in this folder matches the filter")?;
+                title = format!("{title} · only {}", f.query);
+                (copy, root, title)
+            }
+            None => (tree.clone(), root, title),
+        }
     };
     tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<()> {
         let file = std::fs::File::create(&path)?;

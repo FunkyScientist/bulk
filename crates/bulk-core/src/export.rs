@@ -442,12 +442,13 @@ pub fn collect_changes(
     old_root: Option<NodeId>,
     new_root: NodeId,
     limit: usize,
+    filters: diff::Filters,
 ) -> Vec<ChangeRow> {
     let mut out = Vec::new();
     let base = new.path(new_root);
     let mut stack = vec![(old_root, Some(new_root), base)];
     while let Some((o, n, path)) = stack.pop() {
-        let items = diff::children(old, new, o, n, usize::MAX);
+        let items = diff::children(old, new, o, n, usize::MAX, filters);
         // Reverse so the biggest change is visited (and written) first.
         for it in items.into_iter().rev() {
             let child = format!("{}\\{}", path.trim_end_matches('\\'), it.name);
@@ -767,7 +768,14 @@ mod tests {
         let docs = new.find_path("C:\\My, \"Docs\"").unwrap();
         new.add(docs, "new.pdf", 0, 10, 4096, 0, 0);
         new.aggregate();
-        let rows = collect_changes(&old, &new, Some(old.root), new.root, 100);
+        let rows = collect_changes(
+            &old,
+            &new,
+            Some(old.root),
+            new.root,
+            100,
+            diff::Filters::default(),
+        );
         let paths: Vec<_> = rows.iter().map(|r| r.path.as_str()).collect();
         assert_eq!(paths, ["C:\\My, \"Docs\"", "C:\\My, \"Docs\"\\new.pdf"]);
         assert_eq!(rows[1].status, diff::Status::Added);

@@ -4,7 +4,7 @@
 use rayon::prelude::*;
 
 use crate::search::{self, Query};
-use crate::tree::{NodeId, Tree};
+use crate::tree::{NodeId, Tree, flags};
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct Val {
@@ -107,12 +107,34 @@ impl Filter {
         let v = self.get(id);
         v.files > 0 || v.alloc > 0
     }
+
+    /// A copy of `tree` holding only what matches, for exports.
+    pub fn to_tree(&self, tree: &Tree) -> Tree {
+        let mut out = Tree::new(tree.name(tree.root));
+        let mut stack = vec![(tree.root, out.root)];
+        while let Some((from, to)) = stack.pop() {
+            for c in tree.children(from) {
+                if !self.shows(c) {
+                    continue;
+                }
+                let n = tree.get(c);
+                let f = n.flags & !(flags::NEW | flags::GONE);
+                if n.is_dir() {
+                    let id = out.add(to, tree.name(c), f, 0, 0, n.mtime, n.frn);
+                    stack.push((c, id));
+                } else {
+                    out.add(to, tree.name(c), f, n.size, n.alloc, n.mtime, n.frn);
+                }
+            }
+        }
+        out.aggregate();
+        out
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tree::flags;
 
     #[test]
     fn sizes_count_only_matches() {
@@ -136,5 +158,12 @@ mod tests {
         let f = Filter::new(&t, "trips OR a.mp4", 0);
         assert_eq!(f.get(t.root).alloc, 100);
         assert_eq!(f.matches, 1);
+
+        let f = Filter::new(&t, "kind:video", 0);
+        let copy = f.to_tree(&t);
+        assert_eq!(copy.get(copy.root).alloc, 150);
+        assert_eq!(copy.get(copy.root).files, 2);
+        assert!(copy.find_path(r"C:\Videos\notes.txt").is_none());
+        assert!(copy.find_path(r"C:\Videos\Trips\a.mp4").is_some());
     }
 }

@@ -74,7 +74,14 @@ impl DupeProgress {
 
 /// Files under `root` worth comparing: at least `min_size`, stored locally, and
 /// not a second hard link to something already listed.
-pub fn candidates(tree: &Tree, root: NodeId, min_size: u64, skip_system: bool) -> Vec<Candidate> {
+/// With `filter`, only files matching it are considered.
+pub fn candidates(
+    tree: &Tree,
+    root: NodeId,
+    min_size: u64,
+    skip_system: bool,
+    filter: Option<&crate::filter::Filter>,
+) -> Vec<Candidate> {
     let mut out = Vec::new();
     let mut stack = vec![root];
     while let Some(id) = stack.pop() {
@@ -84,6 +91,7 @@ pub fn candidates(tree: &Tree, root: NodeId, min_size: u64, skip_system: bool) -
                 || n.has(flags::REPARSE)
                 || n.has(flags::OFFLINE)
                 || n.has(flags::META)
+                || filter.is_some_and(|f| !f.shows(c))
             {
                 continue;
             }

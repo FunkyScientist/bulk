@@ -8,6 +8,7 @@
   import ShoppingCart from '@lucide/svelte/icons/shopping-cart';
   import { api, type DupeGroup, type DupesEvent } from '$lib/api';
   import { app } from '$lib/app.svelte';
+  import FilterChip from './FilterChip.svelte';
   import { bytes, count, date, duration } from '$lib/format';
 
   let { letter }: { letter: string } = $props();
@@ -58,7 +59,9 @@
     error = '';
     picked = {};
     progress = null;
-    const scope = inFolder && focus !== null ? folderPath : `${letter}:\\`;
+    const only = app.filters[letter]?.query;
+    const where = inFolder && focus !== null ? folderPath : `${letter}:\\`;
+    const scope = only ? `${where} · only ${only}` : where;
     await api.dupesStart(letter, inFolder ? focus : null, minSize, skipSystem, (e) => {
       if (e.type === 'cancelled') running = false;
       if (e.type === 'progress') progress = e;
@@ -151,6 +154,7 @@
           : `Only ${folderPath || folderName || 'the open folder'}`}
       </span>
     </label>
+    <FilterChip {letter} />
     <div class="ml-auto">
       {#if running}
         <button

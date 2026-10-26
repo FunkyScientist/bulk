@@ -48,14 +48,13 @@ pub fn dupes_start(
 ) -> Result<(), String> {
     let cands = {
         let drives = state.drives.lock().unwrap();
-        let tree = drives
-            .get(&letter)
-            .and_then(|d| d.tree.as_ref())
-            .ok_or("not scanned")?;
+        let d = drives.get(&letter).ok_or("unknown drive")?;
+        let tree = d.tree.as_ref().ok_or("not scanned")?;
         let root = root
             .filter(|&r| (r as usize) < tree.len())
             .unwrap_or(tree.root);
-        dupes::candidates(tree, root, min_size, skip_system)
+        // A Browse filter narrows the search to the files it shows.
+        dupes::candidates(tree, root, min_size, skip_system, d.view.filter.as_ref())
     };
     let progress = Arc::new(DupeProgress::default());
     if let Some(old) = app

@@ -66,6 +66,7 @@ pub(crate) fn summarize(
     old: &bulk_core::Tree,
     new: &bulk_core::Tree,
     folder: Option<NodeId>,
+    f: diff::Filters,
 ) -> DiffSummary {
     let new_root = folder
         .filter(|&f| (f as usize) < new.len() && new.get(f).is_dir())
@@ -76,14 +77,14 @@ pub(crate) fn summarize(
     } else {
         old.find_path(&scope)
     };
-    let n = *new.get(new_root);
-    let (old_alloc, old_files) = old_root.map_or((0, 0), |o| (old.get(o).alloc, old.get(o).files));
+    let (new_alloc, new_files) = diff::totals(new, f.new, new_root);
+    let (old_alloc, old_files) = old_root.map_or((0, 0), |o| diff::totals(old, f.old, o));
     DiffSummary {
         taken,
         old_alloc,
-        new_alloc: n.alloc,
+        new_alloc,
         old_files,
-        new_files: n.files,
+        new_files,
         old_root,
         new_root,
         scope,
@@ -108,13 +109,21 @@ pub async fn diff_open(
         .map_err(|e| e.to_string())?;
     let mut drives = state.drives.lock().unwrap();
     let d = drives.get_mut(&letter).ok_or("unknown drive")?;
-    let new = d.tree.as_ref().ok_or("not scanned")?;
+    new_tree(d)?;
     if meta.serial != d.vol.serial {
         return Err("snapshot is from a different drive".into());
     }
-    let summary = summarize(meta.taken, &old, new, folder);
     d.diff = Some((meta, old));
-    Ok(summary)
+    d.diff_filter = None;
+    d.sync_diff_filter();
+    let (meta, old) = d.diff.as_ref().unwrap();
+    Ok(summarize(
+        meta.taken,
+        old,
+        new_tree(d)?,
+        folder,
+        d.diff_filters(),
+    ))
 }
 
 /// Re-scope the loaded comparison to `folder` (or the whole drive).
@@ -124,11 +133,12 @@ pub fn diff_scope(
     letter: char,
     folder: Option<NodeId>,
 ) -> Res<DiffSummary> {
-    let drives = state.drives.lock().unwrap();
-    let d = drives.get(&letter).ok_or("unknown drive")?;
+    let mut drives = state.drives.lock().unwrap();
+    let d = drives.get_mut(&letter).ok_or("unknown drive")?;
+    d.sync_diff_filter();
     let new = d.tree.as_ref().ok_or("not scanned")?;
     let (meta, old) = d.diff.as_ref().ok_or("no snapshot loaded")?;
-    Ok(summarize(meta.taken, old, new, folder))
+    Ok(summarize(meta.taken, old, new, folder, d.diff_filters()))
 }
 
 /// Write the loaded comparison, scoped to `folder`, to `path` (chosen by the user).
@@ -143,19 +153,26 @@ pub async fn export_changes(
     use crate::commands::ExportFormat;
     use bulk_core::export::{self, ChangeSummary};
     // Collect under the lock (it's quick); write the file without it.
-    let (summary, rows) = {
-        let drives = state.drives.lock().unwrap();
-        let d = drives.get(&letter).ok_or("unknown drive")?;
+    let (summary, rows, only) = {
+        let mut drives = state.drives.lock().unwrap();
+        let d = drives.get_mut(&letter).ok_or("unknown drive")?;
+        d.sync_diff_filter();
         let new = d.tree.as_ref().ok_or("not scanned")?;
         let (meta, old) = d.diff.as_ref().ok_or("no snapshot loaded")?;
-        let s = summarize(meta.taken, old, new, folder);
-        let rows = export::collect_changes(old, new, s.old_root, s.new_root, 500_000);
-        (s, rows)
+        let f = d.diff_filters();
+        let s = summarize(meta.taken, old, new, folder, f);
+        let rows = export::collect_changes(old, new, s.old_root, s.new_root, 500_000, f);
+        let only = d.view.filter.as_ref().map(|f| f.query.clone());
+        (s, rows, only)
     };
     tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<()> {
         let file = std::fs::File::create(&path)?;
+        let scope = match &only {
+            Some(q) => format!("{} · only {q}", summary.scope),
+            None => summary.scope.clone(),
+        };
         let facts = ChangeSummary {
-            scope: &summary.scope,
+            scope: &scope,
             since: summary.taken as u32,
             generated: crate::scan::now() as u32,
             old_alloc: summary.old_alloc,
@@ -207,18 +224,31 @@ pub fn diff_children(
     old_id: Option<NodeId>,
     new_id: Option<NodeId>,
 ) -> Res<Vec<Item>> {
-    let drives = state.drives.lock().unwrap();
-    let d = drives.get(&letter).ok_or("unknown drive")?;
+    let mut drives = state.drives.lock().unwrap();
+    let d = drives.get_mut(&letter).ok_or("unknown drive")?;
+    d.sync_diff_filter();
     let new = d.tree.as_ref().ok_or("not scanned")?;
     let (_, old) = d.diff.as_ref().ok_or("no snapshot loaded")?;
     let old_id = old_id.filter(|&i| (i as usize) < old.len());
     let new_id = new_id.filter(|&i| (i as usize) < new.len());
-    Ok(diff::children(old, new, old_id, new_id, 400))
+    Ok(diff::children(
+        old,
+        new,
+        old_id,
+        new_id,
+        400,
+        d.diff_filters(),
+    ))
 }
 
 #[tauri::command]
 pub fn diff_close(state: State<AppState>, letter: char) {
     if let Some(d) = state.drives.lock().unwrap().get_mut(&letter) {
         d.diff = None;
+        d.diff_filter = None;
     }
+}
+
+fn new_tree(d: &crate::state::Drive) -> Res<&bulk_core::Tree> {
+    d.tree.as_ref().ok_or_else(|| "not scanned".into())
 }

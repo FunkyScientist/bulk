@@ -5,7 +5,38 @@ use std::collections::HashMap;
 
 use serde::Serialize;
 
+use crate::filter::Filter;
 use crate::tree::{NodeId, Tree};
+
+/// Filters for the old and new tree: only matching files are compared, and folder
+/// sizes count only those.
+#[derive(Clone, Copy, Default)]
+pub struct Filters<'a> {
+    pub old: Option<&'a Filter>,
+    pub new: Option<&'a Filter>,
+}
+
+/// Size on disk and file count of `id`, as the filter sees it.
+pub fn totals(tree: &Tree, f: Option<&Filter>, id: NodeId) -> (u64, u32) {
+    match f {
+        Some(f) => {
+            let v = f.get(id);
+            (v.alloc, v.files)
+        }
+        None => (tree.get(id).alloc, tree.get(id).files),
+    }
+}
+
+fn shown(f: Option<&Filter>, id: NodeId) -> bool {
+    f.is_none_or(|f| f.shows(id))
+}
+
+fn has_kids(tree: &Tree, f: Option<&Filter>, id: NodeId) -> bool {
+    match f {
+        Some(f) => tree.children(id).any(|c| f.shows(c)),
+        None => tree.has_children(id),
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,10 +71,11 @@ pub fn children(
     old_id: Option<NodeId>,
     new_id: Option<NodeId>,
     limit: usize,
+    f: Filters,
 ) -> Vec<Item> {
     let mut by_name: HashMap<Vec<u8>, NodeId> = HashMap::new();
     if let Some(o) = old_id {
-        for c in old.children(o) {
+        for c in old.children(o).filter(|&c| shown(f.old, c)) {
             by_name.insert(old.name_lower(c).to_vec(), c);
         }
     }
@@ -51,47 +83,56 @@ pub fn children(
     let mut out = Vec::new();
     if let Some(n) = new_id {
         for c in new.children(n) {
-            let nn = new.get(c);
             let matched = by_name.remove(new.name_lower(c));
-            let (oa, of) = matched.map_or((0, 0), |o| (old.get(o).alloc, old.get(o).files));
-            let delta = nn.alloc as i64 - oa as i64;
-            let files_changed = matched.is_some_and(|o| old.get(o).files != nn.files);
-            if matched.is_some() && delta == 0 && !files_changed {
+            if !shown(f.new, c) && matched.is_none() {
+                continue;
+            }
+            let (na, nf) = if shown(f.new, c) {
+                totals(new, f.new, c)
+            } else {
+                (0, 0)
+            };
+            let (oa, of) = matched.map_or((0, 0), |o| totals(old, f.old, o));
+            let delta = na as i64 - oa as i64;
+            if matched.is_some() && delta == 0 && of == nf {
                 continue;
             }
             out.push(Item {
                 name: new.name(c).to_string(),
                 old_id: matched,
                 new_id: Some(c),
-                dir: nn.is_dir(),
+                dir: new.get(c).is_dir(),
                 old_alloc: oa,
-                new_alloc: nn.alloc,
+                new_alloc: na,
                 delta,
                 old_files: of,
-                new_files: nn.files,
-                status: if matched.is_some() {
-                    Status::Changed
-                } else {
+                new_files: nf,
+                status: if matched.is_none() {
                     Status::Added
+                } else if na == 0 && nf == 0 {
+                    Status::Removed
+                } else {
+                    Status::Changed
                 },
-                has_kids: new.has_children(c) || matched.is_some_and(|o| old.has_children(o)),
+                has_kids: has_kids(new, f.new, c)
+                    || matched.is_some_and(|o| has_kids(old, f.old, o)),
             });
         }
     }
     for (_, o) in by_name {
-        let on = old.get(o);
+        let (oa, of) = totals(old, f.old, o);
         out.push(Item {
             name: old.name(o).to_string(),
             old_id: Some(o),
             new_id: None,
-            dir: on.is_dir(),
-            old_alloc: on.alloc,
+            dir: old.get(o).is_dir(),
+            old_alloc: oa,
             new_alloc: 0,
-            delta: -(on.alloc as i64),
-            old_files: on.files,
+            delta: -(oa as i64),
+            old_files: of,
             new_files: 0,
             status: Status::Removed,
-            has_kids: old.has_children(o),
+            has_kids: has_kids(old, f.old, o),
         });
     }
     out.sort_by(|a, b| {
@@ -125,7 +166,14 @@ mod tests {
         new.add(new.root, "same.bin", 0, 5, 5, 0, 0);
         new.aggregate();
 
-        let items = children(&old, &new, Some(old.root), Some(new.root), 100);
+        let items = children(
+            &old,
+            &new,
+            Some(old.root),
+            Some(new.root),
+            100,
+            Filters::default(),
+        );
         assert_eq!(items.len(), 3);
         assert_eq!(items[0].name, "new.iso");
         assert_eq!(items[0].status, Status::Added);
@@ -134,8 +182,28 @@ mod tests {
         assert_eq!(items[2].name, "docs");
         assert_eq!(items[2].delta, 20);
 
-        let inner = children(&old, &new, items[2].old_id, items[2].new_id, 100);
+        let inner = children(
+            &old,
+            &new,
+            items[2].old_id,
+            items[2].new_id,
+            100,
+            Filters::default(),
+        );
         assert_eq!(inner.len(), 1);
         assert_eq!(inner[0].delta, 20);
+
+        // Only .iso files: just the new one shows up.
+        let (fo, fnew) = (
+            Filter::new(&old, "ext:iso", 0),
+            Filter::new(&new, "ext:iso", 0),
+        );
+        let f = Filters {
+            old: Some(&fo),
+            new: Some(&fnew),
+        };
+        let items = children(&old, &new, Some(old.root), Some(new.root), 100, f);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].name, "new.iso");
     }
 }

@@ -56,7 +56,7 @@ drives (like Google Drive) are listed but only scanned when you ask.
 
 ```
 ┌───────────────────────────── title bar: search, cart, theme ─────────────────────────────┐
-│ sidebar │  C: Local disk · 197 GB in 1.2M files · 37 GB free · Fast · Live   Browse Changes │
+│ sidebar │  C: Local disk · 197 GB in 1.2M files · 37 GB free            Browse Changes │
 │         │                                         Duplicates Types  Export  Rescan ▾  │
 │  C: ◔   │ ┌──────────────── file list ───────────┐ ┌──────────── treemap / sunburst ────────┐ │
 │  D: ◑   │ │ Users                     84.0 GB    │ │                                        │ │
@@ -68,8 +68,10 @@ drives (like Google Drive) are listed but only scanned when you ask.
 
 - **Sidebar**: one ring per drive showing how full it is. Collapse it with Ctrl+B; the
   collapsed rail still shows each drive, with details in a tooltip.
-- **Drive header**: size, file count, free space (amber below 10%, red below 5%), how
-  it was scanned (*Fast* = MFT) and whether it's *Live*.
+- **Drive header**: size, file count and free space (amber below 10%, red below 5%).
+  Normally that's all: drives are read fast and kept up to date live. It adds
+  *Fast mode off* when scans walk folders instead, and *Snapshot from …* when the
+  drive isn't being kept up to date, so what you see is the last scan.
 - **Tabs**: Browse, Changes, Duplicates and Types. The last three start out scoped to
   the folder you had open in Browse, and show its full path.
 - **Layout**: the chart sits beside the list or below it (Settings → Layout). Drag the
@@ -174,7 +176,12 @@ how many files match and how much space they take. Esc or ✕ clears it.
 
 A filter can also come from elsewhere: *Filter Browse* in the search palette (Alt+Enter)
 uses the current search, and clicking a row in Types filters to that type or extension.
-The filter stays while files change and across rescans.
+The filter stays while files change and across rescans, and it carries over:
+
+- **Changes** only compares matching files (an *Only …* chip shows it; its ✕ clears
+  the filter).
+- **Duplicates** only looks among matching files.
+- **Export** writes only what matches, from any tab, and the report says so.
 
 ### Types
 
@@ -627,7 +634,7 @@ The installer:
 |---|---|
 | Scans are slow and protected folders are missing | Fast mode is off or wasn't allowed. Settings → Fast mode, or the sidebar's *Allow*. |
 | "Fast mode needs permission" after updating | The helper task points at an older copy; *Allow* re-registers it. |
-| A drive isn't *Live* | It was scanned with the folder walk (no journal position). Rescan the whole drive with fast mode on. |
+| A drive shows *Snapshot from …* | It was scanned with the folder walk (no journal position). Rescan the whole drive with fast mode on. |
 | Changes tab says a snapshot came from a standard scan | That snapshot was a folder walk, which can't see protected folders, so some differences are just what it couldn't see. Pick one taken with fast mode. |
 | Lots of grey "Deleted" items | They're cleared by rescanning the folder (Ctrl+R). |
 | Snapshot folder looks empty in Explorer | You're running a dev build from inside a packaged app; use Settings → Open folder. |
