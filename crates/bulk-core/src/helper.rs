@@ -229,12 +229,27 @@ impl Client {
     fn connect(&self) -> std::io::Result<File> {
         const SECURITY_SQOS_PRESENT: u32 = 0x0010_0000;
         const SECURITY_IDENTIFICATION: u32 = 1 << 16;
-        OpenOptions::new()
-            .read(true)
-            .write(true)
-            // Don't let the server impersonate us beyond identifying who we are.
-            .security_qos_flags(SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION)
-            .open(&self.pipe)
+        const ERROR_PIPE_BUSY: i32 = 231;
+        // Several drives connect at once at startup; the helper opens the next pipe
+        // instance as soon as one is taken, so a busy pipe is only a short wait.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let r = OpenOptions::new()
+                .read(true)
+                .write(true)
+                // Don't let the server impersonate us beyond identifying who we are.
+                .security_qos_flags(SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION)
+                .open(&self.pipe);
+            match r {
+                Err(e)
+                    if e.raw_os_error() == Some(ERROR_PIPE_BUSY)
+                        && Instant::now() < deadline =>
+                {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                r => return r,
+            }
+        }
     }
 
     /// Whether the helper is running and answering.
