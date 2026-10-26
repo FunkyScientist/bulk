@@ -4,7 +4,7 @@
 //! - `holiday 2023` words anywhere in the name; `"my notes"` keeps spaces
 //! - `labels_2026*.pdf` wildcards (`*`, `?`) match the whole name
 //! - `downloads/report` path pieces, folders in order (`C:/Users/…` starts at a drive)
-//! - `ext:mp4,mkv` / `ext:xls*` extension
+//! - `ext:mp4,mkv` / `ext:xls*` extension, `ext:none` files without one
 //! - `kind:video` (or `type:video`) a group of extensions, see `kinds`
 //! - `size:>1GB`, `size:<10MB`, `size:1GB..5GB` size on disk
 //! - `modified:2024`, `modified:>2024-06`, `modified:<30d`, `older:1y`, `newer:7d`,
@@ -56,6 +56,7 @@ enum Cond {
     Name(Pat),
     Path { segs: Vec<Pat>, anchored: bool },
     Ext(Vec<Pat>),
+    NoExt,
     Kind(Vec<usize>),
     Size(Option<u64>, Option<u64>),
     /// Modified in `[after, before)`, unix seconds.
@@ -279,6 +280,7 @@ fn bare(q: &mut Query, text: &str, neg: bool) -> Cond {
 fn keyed(q: &mut Query, key: &str, val: &str, now: u64) -> Option<Cond> {
     let lower = val.to_ascii_lowercase();
     Some(match key {
+        "ext" if lower == "none" => Cond::NoExt,
         "ext" => Cond::Ext(
             val.split(',')
                 .map(|e| e.trim_start_matches('.'))
@@ -570,6 +572,7 @@ fn cond(ctx: &Ctx, id: NodeId, c: &Cond) -> Option<u8> {
             let ext = kinds::ext_of(name).filter(|_| !n.is_dir())?;
             yes(pats.iter().any(|p| p.matches(ext)))
         }
+        Cond::NoExt => yes(!n.is_dir() && kinds::ext_of(name).is_none()),
         Cond::Kind(ks) => yes(!n.is_dir() && ks.contains(&kinds::kind_of(name))),
         Cond::Size(a, b) => {
             yes(a.is_none_or(|m| n.alloc >= m) && b.is_none_or(|m| n.alloc <= m))
@@ -696,6 +699,7 @@ mod tests {
         assert_eq!(names(&t, "modified:2023 holiday").len(), 2);
         assert_eq!(names(&t, "under:C:/Users ext:pdf").len(), 2);
         assert_eq!(names(&t, "kind:nonsense").len(), 0);
+        assert_eq!(names(&t, "ext:none"), Vec::<String>::new());
     }
 
     #[test]

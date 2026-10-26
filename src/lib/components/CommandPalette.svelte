@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import type { Component } from 'svelte';
@@ -26,6 +26,7 @@
   import Check from '@lucide/svelte/icons/check';
   import Minus from '@lucide/svelte/icons/minus';
   import Globe from '@lucide/svelte/icons/globe';
+  import Shapes from '@lucide/svelte/icons/shapes';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import { api, type SearchHit, type SearchScope } from '$lib/api';
   import { app } from '$lib/app.svelte';
@@ -64,7 +65,8 @@
 
   $effect(() => {
     if (open) {
-      text = '';
+      text = untrack(() => app.searchRequest) ?? '';
+      app.searchRequest = null;
       hits = [];
       stats = null;
       active = 0;
@@ -104,6 +106,12 @@
       { kind: 'action', label: 'Browse files', icon: FolderTree, run: () => (app.tab = 'browse') },
       { kind: 'action', label: 'What changed', icon: History, run: () => (app.tab = 'changes') },
       { kind: 'action', label: 'Find duplicates', icon: Copy, run: () => (app.tab = 'duplicates') },
+      {
+        kind: 'action',
+        label: 'Storage by file type',
+        icon: Shapes,
+        run: () => (app.tab = 'types'),
+      },
       {
         kind: 'action',
         label: 'Open cleanup cart',
@@ -332,8 +340,8 @@
     ['"tax return"', 'Exact phrase, spaces included'],
     ['labels_2026*.pdf', 'Wildcards: * any text, ? one character'],
     ['Downloads/invoice', 'Folder, then name. C:/Users/… starts at a drive'],
-    ['kind:video', 'Also image, audio, document, spreadsheet, archive, code…'],
-    ['ext:pdf,docx', 'Extensions. Wildcards work too: ext:xls*'],
+    ['kind:video', 'Also image, audio, document, spreadsheet, archive, system…'],
+    ['ext:pdf,docx', 'Extensions. Also ext:xls*, or ext:none'],
     ['size:>1GB', 'Size on disk. Also <10MB, 1GB..5GB'],
     ['modified:<30d', 'Also modified:2024, >2024-06, older:1y, newer:7d'],
     ['type:dir', 'Only folders (type:file for files)'],

@@ -71,8 +71,15 @@ pub const KINDS: &[Kind] = &[
         key: "program",
         label: "Programs",
         exts: &[
-            "exe", "dll", "sys", "msi", "msix", "msixbundle", "appx", "appxbundle", "msp", "so",
-            "lib", "ocx", "drv", "node", "apk", "jar", "efi", "mui", "winmd",
+            "exe", "dll", "msi", "msix", "msixbundle", "appx", "appxbundle", "msp", "so", "lib",
+            "ocx", "node", "apk", "jar", "pyd", "asar",
+        ],
+    },
+    Kind {
+        key: "system",
+        label: "System files",
+        exts: &[
+            "sys", "drv", "efi", "mui", "cat", "mum", "manifest", "winmd", "nls",
         ],
     },
     Kind {

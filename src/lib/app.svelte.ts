@@ -75,13 +75,15 @@ class AppState {
   focus = $state<Record<string, number | null>>({});
   /** Where the command palette searches; kept between openings. */
   searchScope = $state<'all' | 'drive' | 'folder'>('all');
+  /** Text for the command palette to open with. */
+  searchRequest = $state<string | null>(null);
   /** Asks the tree list to expand to and scroll to a node. */
   revealRequest = $state<{ id: number; seq: number } | null>(null);
   visual = $state<'treemap' | 'sunburst'>(readPref('bulk.visual', 'treemap'));
   /** Files beside the chart (columns) or above it (rows). */
   layout = $state<Layout>(readPref<Layout>('bulk.layout', 'columns'));
   split = $state(Number(readPref('bulk.split', '0.5')) || 0.5);
-  tab = $state<'browse' | 'changes' | 'duplicates'>('browse');
+  tab = $state<'browse' | 'changes' | 'duplicates' | 'types'>('browse');
   cart = $state<CartItem[]>([]);
   cartOpen = $state(false);
   /** Bumped when something is added, so the cart button can bounce. */
@@ -221,6 +223,12 @@ class AppState {
   openMenu(e: MouseEvent, items: MenuItem[]) {
     e.preventDefault();
     this.menu = { x: e.clientX, y: e.clientY, items };
+  }
+
+  /** Open the command palette searching for `text`. */
+  openSearch(text: string, scope: 'all' | 'drive' | 'folder') {
+    this.searchScope = scope;
+    this.searchRequest = text;
   }
 
   async addToCart(letter: string, ids: number[]) {

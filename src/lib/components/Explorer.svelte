@@ -15,6 +15,8 @@
   import History from '@lucide/svelte/icons/history';
   import CopyIcon from '@lucide/svelte/icons/copy';
   import DupesView from './DupesView.svelte';
+  import TypesView from './TypesView.svelte';
+  import Shapes from '@lucide/svelte/icons/shapes';
   import Share from '@lucide/svelte/icons/share';
   import { canExport, exportMenu } from '$lib/exporting';
   import { api } from '$lib/api';
@@ -68,6 +70,7 @@
     { k: 'browse', l: 'Browse', I: FolderTree },
     { k: 'changes', l: 'Changes', I: History },
     { k: 'duplicates', l: 'Duplicates', I: CopyIcon },
+    { k: 'types', l: 'Types', I: Shapes },
   ] as const;
 
   let body: HTMLDivElement | undefined = $state();
@@ -174,7 +177,9 @@
             ? canExport(drive.letter)
               ? 'Export these duplicates'
               : 'Find duplicates first'
-            : 'Export the folder shown in the chart'}
+            : app.tab === 'types'
+              ? 'Nothing to export from Types'
+              : 'Export the folder shown in the chart'}
         onclick={(e) => exportMenu(e, drive.letter)}
       >
         <Share class="size-3.5" /> Export
@@ -205,7 +210,11 @@
     </div>
   </div>
 
-  {#if app.tab === 'duplicates'}
+  {#if app.tab === 'types'}
+    <div class="min-h-0 flex-1">
+      <TypesView letter={drive.letter} />
+    </div>
+  {:else if app.tab === 'duplicates'}
     <div class="min-h-0 flex-1">
       <DupesView letter={drive.letter} />
     </div>

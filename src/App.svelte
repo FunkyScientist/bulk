@@ -18,6 +18,9 @@
   import RescanDialog from '$lib/components/RescanDialog.svelte';
 
   let palette = $state(false);
+  $effect(() => {
+    if (app.searchRequest !== null) palette = true;
+  });
   let shortcuts = $state(false);
   let settings = $state(false);
   let rescan = $state(false);

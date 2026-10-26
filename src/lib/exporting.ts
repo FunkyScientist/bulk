@@ -45,6 +45,7 @@ type Kind = keyof typeof kinds;
 
 /** Whether the current tab has anything to export. */
 export function canExport(letter: string): boolean {
+  if (app.tab === 'types') return false;
   if (app.tab === 'changes') return app.diffView?.letter === letter && app.diffView.items > 0;
   if (app.tab === 'duplicates') return (app.dupes[letter]?.groups.length ?? 0) > 0;
   return true;
@@ -82,6 +83,7 @@ async function run(letter: string, kind: Kind, format: Format) {
 /** Menu for the Export button: the folder shown in the chart, or what the Changes or
  * Duplicates tab is showing. */
 export function exportMenu(e: MouseEvent, letter: string) {
+  if (app.tab === 'types') return;
   const kind: Kind = app.tab;
   const items: MenuItem[] = (Object.keys(formats) as Format[]).map((k) => ({
     label: kinds[kind].labels[k],
