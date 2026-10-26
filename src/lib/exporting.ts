@@ -18,7 +18,7 @@ const kinds = {
   browse: {
     file: '',
     labels: {
-      html: 'HTML report (shareable page)',
+      html: 'HTML report',
       csv: 'CSV list of every file',
       json: 'JSON folder tree',
     },

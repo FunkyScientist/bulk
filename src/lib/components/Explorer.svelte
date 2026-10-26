@@ -2,7 +2,7 @@
   import { fade, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-  import Zap from '@lucide/svelte/icons/zap';
+  import ZapOff from '@lucide/svelte/icons/zap-off';
   import X from '@lucide/svelte/icons/x';
   import Check from '@lucide/svelte/icons/check';
   import { app } from '$lib/app.svelte';
@@ -114,20 +114,16 @@
         class:text-danger={drive.total > 0 && drive.free / drive.total < 0.05}
         title="{bytes(drive.free)} free of {bytes(drive.total)}">{bytes(drive.free)} free</span
       >
-      {#if drive.method === 'mft'}<span class="mx-1">·</span><Zap
-          class="inline size-3 -translate-y-px text-accent"
-        /> Fast{/if}
-      {#if !drive.live}<span class="mx-1">·</span>as of {ago(drive.scannedAt ?? 0)}{/if}
+      {#if app.helper === 'off' && drive.method !== 'mft'}<span class="mx-1">·</span><span
+          title="Scans walk folders one by one and the drive isn't kept up to date. Turn fast mode on in Settings."
+          ><ZapOff class="inline size-3 -translate-y-px" /> Fast mode off</span
+        >{/if}
+      {#if !drive.live && drive.scannedAt}<span class="mx-1">·</span><span
+          class="text-warn"
+          title="Not being kept up to date: this is the last scan. Rescan to refresh."
+          ><History class="inline size-3 -translate-y-px" /> Snapshot from {ago(drive.scannedAt)}</span
+        >{/if}
     </div>
-    {#if drive.live}
-      <span
-        class="flex items-center gap-1.5 rounded-full bg-[color-mix(in_oklab,var(--ok)_14%,transparent)] px-2 py-0.5 text-[11px] font-medium text-ok"
-        title="Kept up to date as files change"
-        in:fade={{ duration: 200 }}
-      >
-        <span class="live-dot"></span> Live
-      </span>
-    {/if}
 
     <div class="ml-auto flex items-center gap-2">
       <div class="tabs relative flex rounded-lg bg-panel-2 p-0.5 text-[12px]">
@@ -284,28 +280,6 @@
       0 1px 2px rgba(0, 0, 0, 0.25),
       inset 0 0 0 1px var(--line);
     transition: transform 260ms var(--ease-spring);
-  }
-  .live-dot {
-    position: relative;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--ok);
-  }
-  .live-dot::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    background: var(--ok);
-    animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
-  }
-  @keyframes ping {
-    75%,
-    100% {
-      transform: scale(2.6);
-      opacity: 0;
-    }
   }
   .splitter {
     position: relative;
