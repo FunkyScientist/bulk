@@ -464,6 +464,7 @@ pub struct SearchHit {
     dir: bool,
     alloc: u64,
     mtime: u32,
+    files: u32,
 }
 
 #[derive(Serialize)]
@@ -474,31 +475,40 @@ pub struct SearchResult {
     hits: Vec<SearchHit>,
 }
 
-/// Search every scanned drive (or just `letter`). See `bulk_core::search` for the
-/// query syntax.
-#[tauri::command]
-pub async fn search(
-    state: State<'_, AppState>,
-    query: String,
+/// Where a search looks: every drive, one drive, or one folder of a drive.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchScope {
     letter: Option<char>,
-) -> Res<SearchResult> {
-    let t0 = std::time::Instant::now();
-    let q = bulk_core::search::parse(&query, scan::now());
+    folder: Option<NodeId>,
+}
+
+/// Run `query` over the drives in scope, best `limit` hits overall.
+fn run_search(
+    state: &AppState,
+    query: &str,
+    scope: SearchScope,
+    limit: usize,
+) -> (Vec<(u8, SearchHit)>, usize) {
+    use bulk_core::search::Sort;
+    let q = bulk_core::search::parse(query, scan::now());
     let drives = state.drives.lock().unwrap();
-    let mut all: Vec<(u8, u64, SearchHit)> = Vec::new();
+    let mut all: Vec<(u8, SearchHit)> = Vec::new();
     let mut total = 0;
     for (l, d) in drives.iter() {
-        if letter.is_some_and(|x| x != *l) {
+        if scope.letter.is_some_and(|x| x != *l) || !(q.drives.is_empty() || q.drives.contains(l)) {
             continue;
         }
         let Some(tree) = &d.tree else { continue };
-        let (hits, n) = bulk_core::search::search(tree, &q, 120);
+        let folder = scope
+            .folder
+            .filter(|&f| scope.letter == Some(*l) && (f as usize) < tree.len());
+        let (hits, n) = bulk_core::search::search(tree, &q, folder, limit);
         total += n;
         for h in hits {
             let node = tree.get(h.id);
             all.push((
                 h.score,
-                node.alloc,
                 SearchHit {
                     letter: *l,
                     id: h.id,
@@ -507,16 +517,99 @@ pub async fn search(
                     dir: node.is_dir(),
                     alloc: node.alloc,
                     mtime: node.mtime,
+                    files: node.files,
                 },
             ));
         }
     }
-    all.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
-    all.truncate(120);
+    // Each drive's hits are already in order; this merges the drives.
+    all.sort_by(|(sa, a), (sb, b)| match q.sort {
+        Sort::Relevance => sb.cmp(sa).then(b.alloc.cmp(&a.alloc)),
+        Sort::Size => b.alloc.cmp(&a.alloc),
+        Sort::Small => a.alloc.cmp(&b.alloc),
+        Sort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        Sort::Newest => b.mtime.cmp(&a.mtime),
+        Sort::Oldest => a.mtime.cmp(&b.mtime),
+        Sort::Files => b.files.cmp(&a.files),
+    });
+    all.truncate(limit);
+    (all, total)
+}
+
+/// Search every scanned drive, or just the one (and folder) in `scope`. See
+/// `bulk_core::search` for the query syntax.
+#[tauri::command]
+pub async fn search(
+    state: State<'_, AppState>,
+    query: String,
+    scope: SearchScope,
+) -> Res<SearchResult> {
+    let t0 = std::time::Instant::now();
+    let (hits, total) = run_search(&state, &query, scope, 150);
     Ok(SearchResult {
         total,
         elapsed_ms: t0.elapsed().as_secs_f64() * 1000.0,
-        hits: all.into_iter().map(|(_, _, h)| h).collect(),
+        hits: hits.into_iter().map(|(_, h)| h).collect(),
+    })
+}
+
+/// Most results one "select all" takes.
+const SELECT_ALL_MAX: usize = 10_000;
+
+#[derive(Serialize)]
+pub struct DriveIds {
+    letter: char,
+    ids: Vec<NodeId>,
+}
+
+/// Every match (up to `SELECT_ALL_MAX`), grouped by drive, for selecting them all.
+#[tauri::command]
+pub async fn search_ids(
+    state: State<'_, AppState>,
+    query: String,
+    scope: SearchScope,
+) -> Res<Vec<DriveIds>> {
+    let (hits, _) = run_search(&state, &query, scope, SELECT_ALL_MAX);
+    let mut out: Vec<DriveIds> = Vec::new();
+    for (_, h) in hits {
+        match out.iter_mut().find(|d| d.letter == h.letter) {
+            Some(d) => d.ids.push(h.id),
+            None => out.push(DriveIds {
+                letter: h.letter,
+                ids: vec![h.id],
+            }),
+        }
+    }
+    Ok(out)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TypesResult {
+    /// Full path of the folder the numbers cover.
+    scope: String,
+    #[serde(flatten)]
+    breakdown: bulk_core::kinds::Breakdown,
+}
+
+/// Storage by file kind and by extension under `folder` (or the whole drive).
+#[tauri::command]
+pub async fn types(
+    state: State<'_, AppState>,
+    letter: char,
+    folder: Option<NodeId>,
+) -> Res<TypesResult> {
+    let drives = state.drives.lock().unwrap();
+    let tree = drives
+        .get(&letter)
+        .and_then(|d| d.tree.as_ref())
+        .ok_or("not scanned")?;
+    let root = folder
+        .filter(|&f| (f as usize) < tree.len() && tree.get(f).is_dir())
+        .unwrap_or(tree.root);
+    Ok(TypesResult {
+        scope: tree.path(root),
+        breakdown: bulk_core::kinds::breakdown(tree, root),
     })
 }
 

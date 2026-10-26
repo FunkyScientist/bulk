@@ -5,6 +5,7 @@ pub mod diff;
 pub mod dupes;
 pub mod export;
 pub mod helper;
+pub mod kinds;
 pub mod layout;
 pub mod scan;
 pub mod search;

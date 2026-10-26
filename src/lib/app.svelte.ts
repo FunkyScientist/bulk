@@ -73,6 +73,8 @@ class AppState {
   selected = $state<number | null>(null);
   /** Folder the visualisation is zoomed into, per drive (null = drive root). */
   focus = $state<Record<string, number | null>>({});
+  /** Where the command palette searches; kept between openings. */
+  searchScope = $state<'all' | 'drive' | 'folder'>('all');
   /** Asks the tree list to expand to and scroll to a node. */
   revealRequest = $state<{ id: number; seq: number } | null>(null);
   visual = $state<'treemap' | 'sunburst'>(readPref('bulk.visual', 'treemap'));

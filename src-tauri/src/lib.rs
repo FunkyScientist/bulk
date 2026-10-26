@@ -55,6 +55,8 @@ pub fn run() {
             commands::sunburst,
             commands::node_info,
             commands::search,
+            commands::search_ids,
+            commands::types,
             commands::show_in_explorer,
             commands::open_path,
             commands::export,

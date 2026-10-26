@@ -210,6 +210,38 @@ export interface SearchHit {
   dir: boolean;
   alloc: number;
   mtime: number;
+  files: number;
+}
+
+/** Where a search looks: all drives, one drive, or one folder of a drive. */
+export interface SearchScope {
+  letter: string | null;
+  folder: number | null;
+}
+
+export interface ExtStat {
+  ext: string;
+  kind: string;
+  files: number;
+  size: number;
+  alloc: number;
+}
+
+export interface KindStat {
+  key: string;
+  label: string;
+  files: number;
+  size: number;
+  alloc: number;
+  exts: string[];
+}
+
+export interface TypesResult {
+  scope: string;
+  files: number;
+  alloc: number;
+  kinds: KindStat[];
+  exts: ExtStat[];
 }
 
 export interface SearchResult {
@@ -301,8 +333,11 @@ export const api = {
   cartUndo: (id: number) => invoke<UndoResult>('cart_undo', { id }),
   deleteNodes: (letter: string, ids: number[], permanent: boolean) =>
     invoke<DeleteResult>('delete_nodes', { letter, ids, permanent }),
-  search: (query: string, letter?: string) =>
-    invoke<SearchResult>('search', { query, letter: letter ?? null }),
+  search: (query: string, scope: SearchScope) => invoke<SearchResult>('search', { query, scope }),
+  searchIds: (query: string, scope: SearchScope) =>
+    invoke<{ letter: string; ids: number[] }[]>('search_ids', { query, scope }),
+  types: (letter: string, folder: number | null) =>
+    invoke<TypesResult>('types', { letter, folder }),
   history: (letter: string) => invoke<HistoryEntry[]>('history', { letter }),
   diffOpen: (letter: string, path: string, folder: number | null) =>
     invoke<DiffSummary>('diff_open', { letter, path, folder }),
