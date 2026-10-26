@@ -268,6 +268,12 @@ export interface TemplateInfo {
   error: string | null;
 }
 
+/** The colour template's resolved colours for both modes, for HTML reports. */
+export interface ReportTheme {
+  light: TemplateMode;
+  dark: TemplateMode;
+}
+
 /** A search applied to Browse: what's left, and how big it is. */
 export interface FilterInfo {
   query: string;
@@ -415,15 +421,26 @@ export const api = {
     invoke<string>('rel_path', { letter, id, base }),
   showInExplorer: (path: string) => invoke<void>('show_in_explorer', { path }),
   openPath: (path: string) => invoke<void>('open_path', { path }),
-  export: (letter: string, root: number | null, format: 'html' | 'csv' | 'json', path: string) =>
-    invoke<void>('export', { letter, root, format, path }),
+  export: (
+    letter: string,
+    root: number | null,
+    format: 'html' | 'csv' | 'json',
+    path: string,
+    theme: ReportTheme,
+  ) => invoke<void>('export', { letter, root, format, path, theme }),
   exportChanges: (
     letter: string,
     folder: number | null,
     format: 'html' | 'csv' | 'json',
     path: string,
-  ) => invoke<void>('export_changes', { letter, folder, format, path }),
-  exportDupes: (scope: string, sets: DupeGroup[], format: 'html' | 'csv' | 'json', path: string) =>
-    invoke<void>('export_dupes', { scope, sets, format, path }),
+    theme: ReportTheme,
+  ) => invoke<void>('export_changes', { letter, folder, format, path, theme }),
+  exportDupes: (
+    scope: string,
+    sets: DupeGroup[],
+    format: 'html' | 'csv' | 'json',
+    path: string,
+    theme: ReportTheme,
+  ) => invoke<void>('export_dupes', { scope, sets, format, path, theme }),
   backdrop: () => invoke<'mica' | 'solid'>('backdrop'),
 };

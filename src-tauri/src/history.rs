@@ -149,7 +149,9 @@ pub async fn export_changes(
     folder: Option<NodeId>,
     format: crate::commands::ExportFormat,
     path: PathBuf,
+    theme: Option<bulk_core::export::Theme>,
 ) -> Res<()> {
+    let theme = theme.unwrap_or_default();
     use crate::commands::ExportFormat;
     use bulk_core::export::{self, ChangeSummary};
     // Collect under the lock (it's quick); write the file without it.
@@ -183,7 +185,7 @@ pub async fn export_changes(
         match format {
             ExportFormat::Csv => export::write_changes_csv(&rows, file)?,
             ExportFormat::Json => export::write_changes_json(&facts, &rows, file)?,
-            ExportFormat::Html => export::write_changes_html(&facts, &rows, file)?,
+            ExportFormat::Html => export::write_changes_html(&facts, &rows, &theme, file)?,
         }
         Ok(())
     })
@@ -199,7 +201,9 @@ pub async fn export_dupes(
     sets: Vec<bulk_core::export::DupeSet>,
     format: crate::commands::ExportFormat,
     path: PathBuf,
+    theme: Option<bulk_core::export::Theme>,
 ) -> Res<()> {
+    let theme = theme.unwrap_or_default();
     use crate::commands::ExportFormat;
     use bulk_core::export;
     let sets: Vec<_> = sets.into_iter().filter(|s| s.files.len() > 1).collect();
@@ -208,7 +212,7 @@ pub async fn export_dupes(
         match format {
             ExportFormat::Csv => export::write_dupes_csv(&sets, file)?,
             ExportFormat::Json => export::write_dupes_json(&scope, &sets, file)?,
-            ExportFormat::Html => export::write_dupes_html(&scope, &sets, file)?,
+            ExportFormat::Html => export::write_dupes_html(&scope, &sets, &theme, file)?,
         }
         Ok(())
     })

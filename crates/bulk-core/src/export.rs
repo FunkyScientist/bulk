@@ -23,10 +23,98 @@ const CATEGORY_NAMES: [&str; 11] = [
     "Disk images",
     "Data & logs",
 ];
-const CATEGORY_COLORS: [&str; 11] = [
-    "#8b7cff", "#7d8496", "#ff6b8b", "#f5b544", "#c38bff", "#ff9a5a", "#3fd0c9", "#5fa8ff",
-    "#9d92ff", "#f37bc4", "#8fb3a8",
+/// The chart categories (see `layout::category`) as file kinds in a colour template.
+const CATEGORY_KINDS: [&str; 11] = [
+    "folder",
+    "other",
+    "video",
+    "image",
+    "audio",
+    "archive",
+    "code",
+    "document",
+    "program",
+    "diskimage",
+    "database",
 ];
+
+/// Category colour as CSS, set per theme in the page's style sheet.
+fn cat_color(c: usize) -> String {
+    format!("var(--c{c})")
+}
+
+/// One light/dark half of the app's colour template: `ui` colours by name (as the
+/// app's CSS variables) and file-kind colours.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct ThemeMode {
+    pub ui: std::collections::BTreeMap<String, String>,
+    pub files: std::collections::BTreeMap<String, String>,
+}
+
+/// The colour template in use, so reports look like the app.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct Theme {
+    pub light: ThemeMode,
+    pub dark: ThemeMode,
+}
+
+/// Values go into a style sheet; anything that could end a rule or the `<style>`
+/// element is dropped.
+fn safe(v: &str) -> Option<&str> {
+    let v = v.trim();
+    (!v.is_empty() && !v.contains(['<', '>', '{', '}', ';', '\\'])).then_some(v)
+}
+
+fn safe_key(k: &str) -> bool {
+    !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+impl ThemeMode {
+    /// Declarations for one mode: the template's own variables (so values like
+    /// `var(--danger)` resolve), then the report's names mapped onto them.
+    fn vars(&self) -> String {
+        let mut s = String::new();
+        for (k, v) in &self.ui {
+            if let (true, Some(v)) = (safe_key(k), safe(v)) {
+                let _ = write!(s, "--{k}:{v};");
+            }
+        }
+        let has = |k: &str| self.ui.get(k).and_then(|v| safe(v)).is_some();
+        for (report, app) in [
+            ("bg", "app-bg"),
+            ("card", "popover"),
+            ("muted", "fg-muted"),
+            ("subtle", "fg-subtle"),
+            ("track", "panel-2"),
+            ("folder", "chart-folder"),
+            ("collapsed", "accent-soft"),
+            ("up", "grew"),
+            ("down", "shrank"),
+        ] {
+            if has(app) {
+                let _ = write!(s, "--{report}:var(--{app});");
+            }
+        }
+        for (i, kind) in CATEGORY_KINDS.iter().enumerate() {
+            if let Some(v) = self.files.get(*kind).and_then(|v| safe(v)) {
+                let _ = write!(s, "--c{i}:{v};");
+            }
+        }
+        s
+    }
+}
+
+impl Theme {
+    fn css(&self) -> String {
+        format!(
+            ":root{{{}}}@media (prefers-color-scheme:dark){{:root{{{}}}}}",
+            self.light.vars(),
+            self.dark.vars()
+        )
+    }
+}
 
 fn iso(unix: u32) -> String {
     if unix == 0 {
@@ -159,8 +247,8 @@ pub fn human(b: u64) -> String {
 }
 
 const REPORT_CSS: &str = r#"
-:root{--bg:#f7f7fa;--card:#fff;--fg:#16161d;--muted:#5f5f70;--subtle:#8c8c9c;--line:rgba(16,16,40,.08);--track:rgba(16,16,40,.06);--folder:rgba(20,20,60,.045);--collapsed:rgba(106,88,245,.16);--accent:#6a58f5;--shadow:0 1px 2px rgba(16,16,40,.04),0 8px 24px -12px rgba(16,16,40,.12)}
-@media (prefers-color-scheme:dark){:root{--bg:#0f0f14;--card:#17171e;--fg:#ececf2;--muted:#a3a3b5;--subtle:#6e6e80;--line:rgba(255,255,255,.07);--track:rgba(255,255,255,.06);--folder:rgba(255,255,255,.03);--collapsed:rgba(139,124,255,.2);--accent:#8b7cff;--shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px -16px rgba(0,0,0,.6)}}
+:root{--bg:#f7f7fa;--card:#fff;--fg:#16161d;--muted:#5f5f70;--subtle:#8c8c9c;--line:rgba(16,16,40,.08);--track:rgba(16,16,40,.06);--folder:rgba(20,20,60,.045);--collapsed:rgba(106,88,245,.16);--accent:#6a58f5;--shadow:0 1px 2px rgba(16,16,40,.04),0 8px 24px -12px rgba(16,16,40,.12);--up:#e5405e;--down:#17a67b;--logo-1:var(--accent);--logo-2:#3fd0c9;--logo-3:#f5b544;--logo-4:#ff6b8b;--c0:#6a58f5;--c1:#9aa1b2;--c2:#f0506f;--c3:#e0a020;--c4:#a865f5;--c5:#f27c35;--c6:#16b2aa;--c7:#3b88f0;--c8:#7a6cf2;--c9:#e055a8;--c10:#6f9a8d}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0f14;--card:#17171e;--fg:#ececf2;--muted:#a3a3b5;--subtle:#6e6e80;--line:rgba(255,255,255,.07);--track:rgba(255,255,255,.06);--folder:rgba(255,255,255,.03);--collapsed:rgba(139,124,255,.2);--accent:#8b7cff;--shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px -16px rgba(0,0,0,.6);--up:#ff6b81;--down:#3fd0a4;--c0:#8b7cff;--c1:#7d8496;--c2:#ff6b8b;--c3:#f5b544;--c4:#c38bff;--c5:#ff9a5a;--c6:#3fd0c9;--c7:#5fa8ff;--c8:#9d92ff;--c9:#f37bc4;--c10:#8fb3a8}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 "Geist",ui-sans-serif,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 .mono{font-family:"Geist Mono",ui-monospace,Consolas,monospace}
@@ -222,7 +310,7 @@ map.addEventListener('mousemove',e=>{
 map.addEventListener('mouseleave',()=>tip.style.opacity=0);
 "#;
 
-const LOGO: &str = r##"<svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="208" y="208" width="368" height="608" rx="56" fill="#8b7cff"/><rect x="608" y="208" width="208" height="288" rx="48" fill="#3fd0c9"/><rect x="608" y="528" width="208" height="128" rx="40" fill="#f5b544"/><rect x="608" y="688" width="208" height="128" rx="32" fill="#ff6b8b"/></svg>"##;
+const LOGO: &str = r##"<svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="208" y="208" width="368" height="608" rx="56" style="fill:var(--logo-1)"/><rect x="608" y="208" width="208" height="288" rx="48" style="fill:var(--logo-2)"/><rect x="608" y="528" width="208" height="128" rx="40" style="fill:var(--logo-3)"/><rect x="608" y="688" width="208" height="128" rx="32" style="fill:var(--logo-4)"/></svg>"##;
 
 /// A single-file HTML report: treemap, largest folders and files, and file types.
 pub fn write_html(
@@ -230,6 +318,7 @@ pub fn write_html(
     root: NodeId,
     title: &str,
     generated: u32,
+    theme: &Theme,
     out: impl Write,
 ) -> std::io::Result<()> {
     let r = tree.get(root);
@@ -290,7 +379,7 @@ pub fn write_html(
         } else if t.flags & tile_flags::DIR != 0 {
             "var(--collapsed)"
         } else {
-            CATEGORY_COLORS[t.category as usize]
+            &cat_color(t.category as usize)
         };
         let _ = write!(
             svg,
@@ -336,7 +425,7 @@ pub fn write_html(
             } else {
                 format!(
                     r#"<i style="background:{}"></i>"#,
-                    CATEGORY_COLORS[category(tree.name(id)) as usize]
+                    cat_color(category(tree.name(id)) as usize)
                 )
             };
             let _ = write!(
@@ -369,14 +458,14 @@ pub fn write_html(
         let _ = write!(
             bar,
             r#"<span style="flex:{pct:.3};background:{}" title="{} · {}"></span>"#,
-            CATEGORY_COLORS[*c],
+            cat_color(*c),
             CATEGORY_NAMES[*c],
             human(*v)
         );
         let _ = write!(
             legend,
             r#"<li><i style="background:{}"></i>{}<b class="num">{}</b><em class="num">{pct:.1}%</em></li>"#,
-            CATEGORY_COLORS[*c],
+            cat_color(*c),
             CATEGORY_NAMES[*c],
             human(*v)
         );
@@ -390,7 +479,7 @@ pub fn write_html(
 <title>{title} · Bulk report</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>{css}</style></head><body><main>
+<style>{css}{theme}</style></head><body><main>
 <div class="brand">{logo}Bulk report</div>
 <header><div><h1>{title}</h1><div class="path mono">{path}</div></div><div class="date num">{date}</div></header>
 <section class="stats">
@@ -405,6 +494,7 @@ pub fn write_html(
 <footer><span>Made with Bulk</span><span class="num">{date}</span></footer></main>
 <div id="tip"></div><script>{js}</script></body></html>"#,
         css = REPORT_CSS,
+        theme = theme.css(),
         js = REPORT_JS,
         logo = LOGO,
         title = esc(title),
@@ -551,10 +641,9 @@ fn signed(n: i64) -> String {
 }
 
 const LIST_CSS: &str = r#"
-.up{color:#e5405e}.down{color:#17a67b}
-@media (prefers-color-scheme:dark){.up{color:#ff6b81}.down{color:#3fd0a4}}
+.up{color:var(--up)}.down{color:var(--down)}
 .tag{display:inline-block;margin-left:8px;padding:0 6px;border-radius:4px;font-size:11px;font-weight:500;vertical-align:1px}
-.tag.added{background:rgba(229,64,94,.12);color:#e5405e}.tag.removed{background:rgba(23,166,123,.12);color:#17a67b}
+.tag.added{background:color-mix(in oklab,var(--up) 12%,transparent);color:var(--up)}.tag.removed{background:color-mix(in oklab,var(--down) 12%,transparent);color:var(--down)}
 .set{padding:12px 0;border-top:1px solid var(--line)}.set:first-child{border-top:0;padding-top:0}
 .set h3{display:flex;gap:10px;align-items:baseline;margin:0 0 6px;font-size:14px;font-weight:600}
 .set h3 small{color:var(--subtle);font-weight:400;font-size:12px}.set h3 em{margin-left:auto;font-style:normal;font-size:12.5px}
@@ -562,14 +651,14 @@ const LIST_CSS: &str = r#"
 .set div span:last-child{margin-left:auto;flex:none;color:var(--subtle)}
 "#;
 
-fn page(title: &str, subtitle: &str, stats: &str, body: &str) -> String {
+fn page(title: &str, subtitle: &str, stats: &str, body: &str, theme: &Theme) -> String {
     format!(
         r#"<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{t} · Bulk report</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>{css}{list}</style></head><body><main>
+<style>{css}{list}{theme}</style></head><body><main>
 <div class="brand">{logo}Bulk report</div>
 <header><div><h1>{t}</h1><div class="path mono">{sub}</div></div></header>
 <section class="stats">{stats}</section>
@@ -579,6 +668,7 @@ fn page(title: &str, subtitle: &str, stats: &str, body: &str) -> String {
         sub = esc(subtitle),
         css = REPORT_CSS,
         list = LIST_CSS,
+        theme = theme.css(),
         logo = LOGO,
     )
 }
@@ -592,6 +682,7 @@ fn stat(label: &str, value: &str, class: &str) -> String {
 pub fn write_changes_html(
     s: &ChangeSummary,
     rows: &[ChangeRow],
+    theme: &Theme,
     out: impl Write,
 ) -> std::io::Result<()> {
     let delta = s.new_alloc as i64 - s.old_alloc as i64;
@@ -641,7 +732,11 @@ pub fn write_changes_html(
             a = human(r.old_alloc),
             b = human(r.new_alloc),
             w = r.delta.unsigned_abs() as f64 / max as f64 * 100.0,
-            color = if r.delta > 0 { "#e5405e" } else { "#17a67b" },
+            color = if r.delta > 0 {
+                "var(--up)"
+            } else {
+                "var(--down)"
+            },
         );
     }
     let body = format!(
@@ -651,7 +746,7 @@ pub fn write_changes_html(
     let since = iso(s.since).replace('T', " ");
     let subtitle = format!("{} · since {}", s.scope, since.replace('Z', " UTC"));
     let mut w = BufWriter::new(out);
-    w.write_all(page("What changed", &subtitle, &stats, &body).as_bytes())?;
+    w.write_all(page("What changed", &subtitle, &stats, &body, theme).as_bytes())?;
     w.flush()
 }
 
@@ -699,7 +794,12 @@ pub fn write_dupes_json(scope: &str, sets: &[DupeSet], out: impl Write) -> std::
     w.flush()
 }
 
-pub fn write_dupes_html(scope: &str, sets: &[DupeSet], out: impl Write) -> std::io::Result<()> {
+pub fn write_dupes_html(
+    scope: &str,
+    sets: &[DupeSet],
+    theme: &Theme,
+    out: impl Write,
+) -> std::io::Result<()> {
     let wasted: u64 = sets
         .iter()
         .map(|s| s.size * (s.files.len() as u64 - 1))
@@ -734,7 +834,7 @@ pub fn write_dupes_html(scope: &str, sets: &[DupeSet], out: impl Write) -> std::
     }
     let body = format!(r#"<section class="card"><h2>Duplicate sets</h2>{body}</section>"#);
     let mut w = BufWriter::new(out);
-    w.write_all(page("Duplicate files", scope, &stats, &body).as_bytes())?;
+    w.write_all(page("Duplicate files", scope, &stats, &body, theme).as_bytes())?;
     w.flush()
 }
 
@@ -796,8 +896,29 @@ mod tests {
         let v: serde_json::Value = serde_json::from_slice(&j).unwrap();
         assert_eq!(v["root"]["children"][0]["name"], "My, \"Docs\"");
         let mut h = Vec::new();
-        write_html(&t, t.root, "C: Local disk", 0, &mut h).unwrap();
+        write_html(&t, t.root, "C: Local disk", 0, &Theme::default(), &mut h).unwrap();
         let h = String::from_utf8(h).unwrap();
         assert!(h.contains("<svg") && h.contains("Largest files") && h.contains("a.mp4"));
+    }
+
+    #[test]
+    fn html_uses_the_colour_template() {
+        let t = sample();
+        let mut theme = Theme::default();
+        theme.dark.ui.insert("accent".into(), "#3ecf8e".into());
+        theme.dark.ui.insert("app-bg".into(), "#0d1310".into());
+        theme.dark.files.insert("video".into(), "#ff7a85".into());
+        // Anything that could break out of the style sheet is dropped.
+        theme
+            .dark
+            .ui
+            .insert("fg".into(), "red}</style><script>".into());
+        let mut h = Vec::new();
+        write_html(&t, t.root, "C:", 0, &theme, &mut h).unwrap();
+        let h = String::from_utf8(h).unwrap();
+        assert!(h.contains("--accent:#3ecf8e;"));
+        assert!(h.contains("--bg:var(--app-bg);"));
+        assert!(h.contains("--c2:#ff7a85;"));
+        assert!(!h.contains("</style><script>"));
     }
 }

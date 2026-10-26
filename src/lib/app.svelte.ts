@@ -1,3 +1,4 @@
+import { resolve } from './theme';
 import { listen } from '@tauri-apps/api/event';
 import type { Component } from 'svelte';
 import {
@@ -7,6 +8,7 @@ import {
   type DupeGroup,
   type FilterInfo,
   type TemplateInfo,
+  type ReportTheme,
   type Drive,
   type HelperStatus,
   type Progress,
@@ -403,6 +405,13 @@ class AppState {
       ok(this.templates.find((t) => t.id === this.templateId)) ??
       ok(this.templates.find((t) => t.id === 'default'))
     );
+  }
+
+  /** The colours on screen, both modes, for HTML reports to match. */
+  reportTheme(): ReportTheme {
+    const base = this.templates.find((t) => t.id === 'default')?.data;
+    const data = this.template?.data;
+    return { light: resolve(data, base, 'light'), dark: resolve(data, base, 'dark') };
   }
 
   async setTemplate(id: string) {

@@ -691,7 +691,9 @@ pub async fn export(
     root: Option<NodeId>,
     format: ExportFormat,
     path: std::path::PathBuf,
+    theme: Option<bulk_core::export::Theme>,
 ) -> Res<()> {
+    let theme = theme.unwrap_or_default();
     // Work on a copy so live updates and the UI aren't blocked while writing.
     let (tree, root, title) = {
         let drives = state.drives.lock().unwrap();
@@ -730,9 +732,14 @@ pub async fn export(
         match format {
             ExportFormat::Csv => bulk_core::export::write_csv(&tree, root, file)?,
             ExportFormat::Json => bulk_core::export::write_json(&tree, root, file)?,
-            ExportFormat::Html => {
-                bulk_core::export::write_html(&tree, root, &title, scan::now() as u32, file)?
-            }
+            ExportFormat::Html => bulk_core::export::write_html(
+                &tree,
+                root,
+                &title,
+                scan::now() as u32,
+                &theme,
+                file,
+            )?,
         }
         Ok(())
     })

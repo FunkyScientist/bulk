@@ -62,12 +62,14 @@ async function run(letter: string, kind: Kind, format: Format) {
   if (!path) return;
   app.toast(`Exporting ${f.name}…`, { ms: 1500 });
   try {
+    // HTML reports use the colour template on screen.
+    const theme = app.reportTheme();
     if (kind === 'changes')
-      await api.exportChanges(letter, app.diffView?.scope ?? null, format, path);
+      await api.exportChanges(letter, app.diffView?.scope ?? null, format, path, theme);
     else if (kind === 'duplicates') {
       const d = app.dupes[letter];
-      await api.exportDupes(d.scope, d.groups, format, path);
-    } else await api.export(letter, app.focus[letter] ?? null, format, path);
+      await api.exportDupes(d.scope, d.groups, format, path, theme);
+    } else await api.export(letter, app.focus[letter] ?? null, format, path, theme);
     app.toast(`Saved ${path.slice(path.lastIndexOf('\\') + 1)}`, {
       tone: 'ok',
       action:
