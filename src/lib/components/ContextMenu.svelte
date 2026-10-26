@@ -45,7 +45,7 @@
 
 {#if app.menu}
   <div
-    class="fixed inset-0 z-50"
+    class="fixed inset-0 z-[70]"
     role="presentation"
     onpointerdown={close}
     oncontextmenu={(e) => {
@@ -55,7 +55,7 @@
   ></div>
   <div
     bind:this={el}
-    class="menu fixed z-50 min-w-[200px] rounded-xl border border-line-strong p-1 outline-none"
+    class="menu fixed z-[70] min-w-[200px] rounded-xl border border-line-strong p-1 outline-none"
     style="left: {pos.x}px; top: {pos.y}px"
     role="menu"
     tabindex="-1"

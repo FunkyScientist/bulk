@@ -29,7 +29,8 @@ It's built with Rust (scanning, data, layouts) and Svelte 5 inside Tauri 2 (the 
 | **Tree list + charts** | A virtualized file list next to a treemap or sunburst, kept in sync. Zoom into any folder. |
 | **Rescan a folder** | Rescans just the folder you're looking at, and merges it into the drive's data. Whole-drive rescan is one click away. |
 | **What changed** | Compare against any earlier snapshot, scoped to the folder you're in. |
-| **Search everywhere** | Ctrl+K searches every scanned drive in milliseconds: wildcards (`labels_2026*.pdf`), paths (`Downloads/invoice`), filters like `kind:video size:>1GB modified:<30d`, exclusions and OR. Select results and send them to the cleanup cart. |
+| **Search everywhere** | Ctrl+K searches every scanned drive in milliseconds: wildcards (`IMG_2024*.jpg`), paths (`Downloads/invoice`), filters like `kind:video size:>1GB modified:<30d`, exclusions and OR. Select results and send them to the cleanup cart. |
+| **Filter the view** | Limit the list, treemap and sunburst to any search (`kind:video`, `size:>1GB`, …); folder sizes count only what matches. |
 | **Storage by type** | How much space videos, spreadsheets, archives… take, or every extension on its own, for the drive or the folder you're in. |
 | **Cleanup cart** | Collect files and folders from anywhere, review, then send them to the Recycle Bin (with undo) or delete permanently. |
 | **Duplicate finder** | Finds identical files by content, not name. |
@@ -117,7 +118,7 @@ combine freely: `kind:video size:>1GB -in:appdata sort:size`.
 |---|---|---|
 | Words | `tax 2024` | Names containing every word |
 | Quotes | `"tax return"` | The phrase, spaces included |
-| Wildcards | `labels_2026*.pdf`, `IMG_????.jpg` | Whole names: `*` is any text, `?` one character |
+| Wildcards | `IMG_2024*.jpg`, `report_v?.docx` | Whole names: `*` is any text, `?` one character |
 | Path | `Downloads/invoice`, `projects/*.zip` | The name, inside those folders in that order (not necessarily directly) |
 | Drive path | `C:/Users/me/Downloads/report` | Same, but starting at the drive root |
 | `ext:` | `ext:mp4,mkv`, `ext:xls*`, `ext:none` | Extension; `none` is files without one |
@@ -140,13 +141,40 @@ The row under the search box picks where to look: all drives, the current drive,
 the folder open in the chart. The **?** button lists the syntax; click an example to
 add it.
 
-Results can be selected: click their checkboxes, or press Tab to tick the highlighted
-one and move down. The checkbox above the results selects everything shown, then offers
-*Select all N* for every match (up to 10,000). Ctrl+Enter (or *Add to cart*) puts the
-selection in the cleanup cart.
+Results can be selected:
 
-Enter opens a result in the list and chart; Shift+Enter shows it in Explorer. The
-palette also runs commands (rescan, switch views, theme, settings…).
+- Click a checkbox (or Ctrl+click a row), or press Tab to tick the highlighted one.
+- Shift+click selects everything between the last one you ticked and this one;
+  Shift+↑/↓ grows the selection from the keyboard.
+- The checkbox above the results selects everything shown, then offers *Select all N*
+  for every match (up to 10,000).
+
+Right-click a result for the same menu as in the list (add to cart, open, show in
+chart, show in Explorer, delete, copy path), plus select, add the selection to the
+cart, and filter Browse. Their shortcuts work in the palette too:
+
+| Keys | Action |
+|---|---|
+| Enter | Show the result in the list and chart |
+| Shift+Enter / Ctrl+E | Show in Explorer |
+| Ctrl+Enter | Add the selection (or the highlighted result) to the cart |
+| Delete | Same, or take the highlighted result back out (when the cursor is at the end of the search text) |
+| Shift+Delete | Delete the highlighted result (with confirmation) |
+| Ctrl+C | Copy the path(s), unless text is selected in the search box |
+| Alt+Enter | Filter Browse to these results |
+
+The palette also runs commands (rescan, switch views, theme, settings…).
+
+### Filtering Browse
+
+The **Filter** button (Ctrl+Shift+F) opens a bar above the list and chart. Type any
+search query there and press Enter: the list, treemap and sunburst then show only
+what matches, and every folder's size counts only its matching files. The bar shows
+how many files match and how much space they take. Esc or ✕ clears it.
+
+A filter can also come from elsewhere: *Filter Browse* in the search palette (Alt+Enter)
+uses the current search, and clicking a row in Types filters to that type or extension.
+The filter stays while files change and across rescans.
 
 ### Types
 
@@ -171,8 +199,9 @@ or by extension:
 | Fonts, Email, Logs & temp | ttf, otf · pst, eml · log, tmp, dmp, … |
 
 Anything else is *Other*, and files without an extension have their own row. The bar
-at the top shows the split at a glance. Click any row to search for those files (in the
-same folder), biggest first, ready to select and add to the cart.
+at the top shows the split at a glance. Click a row to filter Browse to those files, so
+the list and charts show where they are; the search button on the row lists them in
+the palette instead, biggest first, ready to select and add to the cart.
 
 ### Cleaning up
 
@@ -222,6 +251,7 @@ from Google Fonts and fall back to the system font offline.
 | Keys | Action |
 |---|---|
 | Ctrl+K / Ctrl+F | Search and commands |
+| Ctrl+Shift+F | Filter the list and chart |
 | Ctrl+R / F5 | Rescan open folder |
 | Ctrl+Shift+R | Rescan whole drive |
 | Ctrl+B | Collapse / expand sidebar |
@@ -462,6 +492,7 @@ crates/
       layout.rs         treemap and sunburst layouts, file-type categories
       search.rs         query language and parallel search
       kinds.rs          file kinds by extension, storage per kind/extension
+      filter.rs         a search applied to the tree: sizes counting only matches
       diff.rs           snapshot vs live comparison
       dupes.rs          duplicate finder
       export.rs         HTML/CSV/JSON reports (folder, changes, duplicates)

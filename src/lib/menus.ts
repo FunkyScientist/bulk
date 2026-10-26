@@ -8,8 +8,15 @@ import Trash from '@lucide/svelte/icons/trash-2';
 import { api } from './api';
 import { app, type MenuItem } from './app.svelte';
 
-/** Right-click menu for a file or folder, shared by the list and the charts. */
-export async function nodeMenu(e: MouseEvent, letter: string, id: number, extra: MenuItem[] = []) {
+/** Right-click menu for a file or folder, shared by the list, charts and search.
+ * `onLeave` runs before items that take you somewhere else (the chart, a dialog). */
+export async function nodeMenu(
+  e: MouseEvent,
+  letter: string,
+  id: number,
+  extra: MenuItem[] = [],
+  onLeave?: () => void,
+) {
   e.preventDefault();
   const at = { clientX: e.clientX, clientY: e.clientY, preventDefault() {} } as MouseEvent;
   const info = await api.nodeInfo(letter, id);
@@ -38,6 +45,7 @@ export async function nodeMenu(e: MouseEvent, letter: string, id: number, extra:
       icon: Focus,
       hint: 'Enter',
       run: () => {
+        onLeave?.();
         app.tab = 'browse';
         app.setFocus(letter, info.parent === null ? null : id);
       },
@@ -57,7 +65,10 @@ export async function nodeMenu(e: MouseEvent, letter: string, id: number, extra:
             icon: Trash,
             hint: 'Shift Del',
             danger: true,
-            run: () => (app.deleteRequest = { letter, id }),
+            run: () => {
+              onLeave?.();
+              app.deleteRequest = { letter, id };
+            },
           },
         ]
       : []),

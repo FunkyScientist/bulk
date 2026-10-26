@@ -28,7 +28,10 @@
   import Globe from '@lucide/svelte/icons/globe';
   import Shapes from '@lucide/svelte/icons/shapes';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
+  import Funnel from '@lucide/svelte/icons/funnel';
+  import SquareCheck from '@lucide/svelte/icons/square-check';
   import { api, type SearchHit, type SearchScope } from '$lib/api';
+  import { nodeMenu } from '$lib/menus';
   import { app } from '$lib/app.svelte';
   import { ago, bytes, count } from '$lib/format';
 
@@ -60,6 +63,8 @@
   /** Every match, when "select all" covers more than the hits shown. */
   let pickedAll = $state<{ letter: string; ids: number[] }[] | null>(null);
   let folderName = $state('');
+  /** Hit index the last click or Tab started from, for Shift ranges. */
+  let anchor: number | null = null;
 
   const ROW = 38;
 
@@ -203,6 +208,7 @@
     if (!open) return;
     picked = {};
     pickedAll = null;
+    anchor = null;
     if (q.length < 2) {
       hits = [];
       stats = null;
@@ -229,16 +235,88 @@
     pickedAll !== null || (hits.length > 0 && hits.every((h) => picked[key(h)])),
   );
 
-  function toggle(h: SearchHit) {
-    if (pickedAll) {
-      // Leaving "every match" mode: keep the visible ones except this.
-      picked = Object.fromEntries(hits.filter((x) => x !== h).map((x) => [key(x), x]));
-      pickedAll = null;
-      return;
+  /** Leave "every match" mode, keeping the hits on screen picked. */
+  function settle() {
+    if (!pickedAll) return;
+    picked = Object.fromEntries(hits.map((x) => [key(x), x]));
+    pickedAll = null;
+  }
+
+  /** Tick or untick a hit; with `range`, set everything from the anchor to it. */
+  function toggle(h: SearchHit, range = false) {
+    settle();
+    const i = hits.indexOf(h);
+    if (range && anchor !== null && anchor !== i) {
+      const on = !!picked[key(hits[anchor])];
+      const [a, b] = anchor < i ? [anchor, i] : [i, anchor];
+      for (const x of hits.slice(a, b + 1)) {
+        if (on) picked[key(x)] = x;
+        else delete picked[key(x)];
+      }
+    } else {
+      const k = key(h);
+      if (picked[k]) delete picked[k];
+      else picked[k] = h;
+      anchor = i;
     }
-    const k = key(h);
-    if (picked[k]) delete picked[k];
-    else picked[k] = h;
+  }
+
+  /** Highlighted search hit, if the highlight is on one. */
+  const current = $derived.by(() => {
+    const it = items[active];
+    return it?.kind === 'hit' ? it.hit : null;
+  });
+
+  /** What actions apply to: the selection, or else the highlighted hit. */
+  function targets(): SearchHit[] {
+    const sel = Object.values(picked);
+    return sel.length ? sel : current ? [current] : [];
+  }
+
+  /** Limit Browse (list and charts) to these results. */
+  function filterBrowse() {
+    const letter = scope.letter ?? app.current;
+    const q = text.trim();
+    if (!letter || !q) return;
+    open = false;
+    if (letter !== app.current) app.select(letter);
+    void app.setFilter(letter, q);
+  }
+
+  function hitMenu(e: MouseEvent, h: SearchHit) {
+    e.preventDefault();
+    if (!picked[key(h)] && !pickedAll) active = items.findIndex((x) => x.kind === 'hit' && x.hit === h);
+    const n = pickedCount;
+    void nodeMenu(
+      e,
+      h.letter,
+      h.id,
+      [
+        {
+          label: picked[key(h)] || pickedAll ? 'Deselect' : 'Select',
+          icon: SquareCheck,
+          hint: 'Tab',
+          run: () => toggle(h),
+        },
+        ...(n > 1
+          ? [
+              {
+                label: `Add ${count(n)} selected to cart`,
+                icon: ShoppingCart,
+                hint: 'Ctrl Enter',
+                run: addPicked,
+              },
+            ]
+          : []),
+        {
+          label: 'Filter Browse to these results',
+          icon: Funnel,
+          hint: 'Alt Enter',
+          run: filterBrowse,
+        },
+      ],
+      () => (open = false),
+    );
   }
 
   async function toggleAll() {
@@ -308,14 +386,52 @@
     } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       void addPicked();
+    } else if (e.key === 'Enter' && e.altKey) {
+      e.preventDefault();
+      filterBrowse();
+    } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.shiftKey && current) {
+      // Shift+arrows grow the selection, like a file list.
+      e.preventDefault();
+      if (!picked[key(current)]) toggle(current);
+      move(e.key === 'ArrowDown' ? 1 : -1);
+      const next = items[active];
+      if (next?.kind === 'hit' && !picked[key(next.hit)]) toggle(next.hit);
+    } else if (e.key.toLowerCase() === 'e' && e.ctrlKey && current) {
+      e.preventDefault();
+      void api.showInExplorer(current.path);
+    } else if (
+      e.key.toLowerCase() === 'c' &&
+      e.ctrlKey &&
+      current &&
+      input?.selectionStart === input?.selectionEnd
+    ) {
+      // Ctrl+C copies text when some is selected in the box, else the path(s).
+      e.preventDefault();
+      const paths = targets().map((h) => h.path);
+      void navigator.clipboard.writeText(paths.join('\r\n'));
+      app.toast(paths.length === 1 ? 'Path copied' : `${paths.length} paths copied`);
+    } else if (e.key === 'Delete' && e.shiftKey && current) {
+      e.preventDefault();
+      open = false;
+      app.deleteRequest = { letter: current.letter, id: current.id };
+    } else if (
+      e.key === 'Delete' &&
+      current &&
+      input?.selectionStart === input?.value.length &&
+      input?.selectionEnd === input?.value.length
+    ) {
+      // Nothing to delete after the cursor, so Delete works on the results.
+      e.preventDefault();
+      if (pickedCount) void addPicked();
+      else if (app.inCart(current.path)) void app.removeFromCart([current.path]);
+      else void app.addToCart(current.letter, [current.id]);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       run(items[active], e.shiftKey);
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      const cur = items[active];
-      if (cur?.kind === 'hit') {
-        toggle(cur.hit);
+      if (current) {
+        toggle(current, e.shiftKey);
         move(1);
       }
     } else if (e.key === 'Escape') {
@@ -338,7 +454,7 @@
   const syntax: [string, string][] = [
     ['tax 2024', 'Every word somewhere in the name'],
     ['"tax return"', 'Exact phrase, spaces included'],
-    ['labels_2026*.pdf', 'Wildcards: * any text, ? one character'],
+    ['IMG_2024*.jpg', 'Wildcards: * any text, ? one character'],
     ['Downloads/invoice', 'Folder, then name. C:/Users/… starts at a drive'],
     ['kind:video', 'Also image, audio, document, spreadsheet, archive, system…'],
     ['ext:pdf,docx', 'Extensions. Also ext:xls*, or ext:none'],
@@ -476,9 +592,16 @@
           <span class="text-fg-subtle"
             >Select {stats && stats.total > hits.length
               ? `all ${count(stats.total)}`
-              : 'all'} · <kbd class="kbd">Tab</kbd> picks one</span
+              : 'all'} · <kbd class="kbd">Tab</kbd> picks one, Shift+click a range</span
           >
         {/if}
+        <button
+          class="pressable flex h-6 shrink-0 items-center gap-1.5 rounded-md border border-line px-2 text-[11.5px] text-fg-muted hover:border-line-strong hover:text-fg {pickedCount
+            ? ''
+            : 'ml-auto'}"
+          title="Show only these results in the Browse list and chart (Alt Enter)"
+          onclick={filterBrowse}><Funnel class="size-3.5" /> Filter Browse</button
+        >
       </div>
     {/if}
 
@@ -515,7 +638,13 @@
           class="relative flex w-full items-center gap-3 rounded-lg px-3 text-left"
           style="height: {ROW}px"
           onpointermove={() => (active = i)}
-          onclick={(e) => run(item, e.shiftKey)}
+          onclick={(e) => {
+            if (item.kind === 'hit' && (e.shiftKey || e.ctrlKey)) toggle(item.hit, e.shiftKey);
+            else run(item);
+          }}
+          oncontextmenu={(e) => {
+            if (item.kind === 'hit') hitMenu(e, item.hit);
+          }}
         >
           {#if item.kind === 'action'}
             <item.icon class="size-4 shrink-0 text-fg-muted" />
@@ -532,7 +661,7 @@
               aria-label="Select {h.name}"
               onclick={(e) => {
                 e.stopPropagation();
-                toggle(h);
+                toggle(h, e.shiftKey);
               }}
               onkeydown={() => {}}
             >
@@ -562,9 +691,11 @@
       >
       <span
         ><kbd class="kbd">Shift</kbd> +
-        <kbd class="kbd"><CornerDownLeft class="inline size-2.5" /></kbd> show in Explorer</span
+        <kbd class="kbd"><CornerDownLeft class="inline size-2.5" /></kbd> Explorer</span
       >
       <span><kbd class="kbd">Tab</kbd> select</span>
+      <span><kbd class="kbd">Del</kbd> cart</span>
+      <span>Right-click for more</span>
       <span class="ml-auto"><kbd class="kbd">Esc</kbd> close</span>
     </div>
   </div>
