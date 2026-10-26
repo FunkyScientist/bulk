@@ -128,7 +128,7 @@
           >
             <div class="relative grid shrink-0 place-items-center">
               <UsageRing value={d.total ? used / d.total : 0} active={scanning} />
-              <Icon class="absolute size-3.5 {active ? 'text-accent' : 'text-fg-muted'}" />
+              <Icon class="absolute size-3.5 {active ? 'text-fg' : 'text-fg-muted'}" />
               {#if collapsed && d.live && !scanning}
                 <span class="dot ok" in:fade></span>
               {/if}
