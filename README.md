@@ -29,7 +29,8 @@ It's built with Rust (scanning, data, layouts) and Svelte 5 inside Tauri 2 (the 
 | **Tree list + charts** | A virtualized file list next to a treemap or sunburst, kept in sync. Zoom into any folder. |
 | **Rescan a folder** | Rescans just the folder you're looking at, and merges it into the drive's data. Whole-drive rescan is one click away. |
 | **What changed** | Compare against any earlier snapshot, scoped to the folder you're in. |
-| **Search everywhere** | Ctrl+K searches every scanned drive in milliseconds, with filters like `ext:mp4 size:>1GB older:1y`. |
+| **Search everywhere** | Ctrl+K searches every scanned drive in milliseconds: wildcards (`labels_2026*.pdf`), paths (`Downloads/invoice`), filters like `kind:video size:>1GB modified:<30d`, exclusions and OR. Select results and send them to the cleanup cart. |
+| **Storage by type** | How much space videos, spreadsheets, archives… take, or every extension on its own, for the drive or the folder you're in. |
 | **Cleanup cart** | Collect files and folders from anywhere, review, then send them to the Recycle Bin (with undo) or delete permanently. |
 | **Duplicate finder** | Finds identical files by content, not name. |
 | **Exports** | A shareable HTML report, CSV or JSON for the current folder, the changes, or the duplicates. |
@@ -55,7 +56,7 @@ drives (like Google Drive) are listed but only scanned when you ask.
 ```
 ┌───────────────────────────── title bar: search, cart, theme ─────────────────────────────┐
 │ sidebar │  C: Local disk · 197 GB in 1.2M files · 37 GB free · Fast · Live   Browse Changes │
-│         │                                                     Duplicates  Export  Rescan ▾  │
+│         │                                         Duplicates Types  Export  Rescan ▾  │
 │  C: ◔   │ ┌──────────────── file list ───────────┐ ┌──────────── treemap / sunburst ────────┐ │
 │  D: ◑   │ │ Users                     84.0 GB    │ │                                        │ │
 │  G: ◕   │ │ Windows                   27.9 GB    │ │                                        │ │
@@ -68,7 +69,7 @@ drives (like Google Drive) are listed but only scanned when you ask.
   collapsed rail still shows each drive, with details in a tooltip.
 - **Drive header**: size, file count, free space (amber below 10%, red below 5%), how
   it was scanned (*Fast* = MFT) and whether it's *Live*.
-- **Tabs**: Browse, Changes and Duplicates. Changes and Duplicates start out scoped to
+- **Tabs**: Browse, Changes, Duplicates and Types. The last three start out scoped to
   the folder you had open in Browse, and show its full path.
 - **Layout**: the chart sits beside the list or below it (Settings → Layout). Drag the
   divider to resize.
@@ -109,19 +110,69 @@ With fast mode on, a whole-drive rescan of C: takes about 5 s. A huge folder (ov
 
 ### Search (Ctrl+K)
 
-Type words to match file and folder names on every scanned drive. Add filters:
+Type to search file and folder names. Every part of the query has to match, so filters
+combine freely: `kind:video size:>1GB -in:appdata sort:size`.
 
-| Filter | Example | Meaning |
+| Write | Example | Finds |
 |---|---|---|
-| `ext:` | `ext:mp4,mkv` | Extension (comma-separated) |
-| `size:` | `size:>1GB`, `size:<10mb`, `size:100mb..2gb` | Size, or a range |
-| `older:` / `newer:` | `older:1y`, `newer:2w` | Modified more / less than `d`, `w`, `m`, `y` ago |
-| `before:` / `after:` | `before:2024-06` | Modified before / after a date (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`) |
+| Words | `tax 2024` | Names containing every word |
+| Quotes | `"tax return"` | The phrase, spaces included |
+| Wildcards | `labels_2026*.pdf`, `IMG_????.jpg` | Whole names: `*` is any text, `?` one character |
+| Path | `Downloads/invoice`, `projects/*.zip` | The name, inside those folders in that order (not necessarily directly) |
+| Drive path | `C:/Users/me/Downloads/report` | Same, but starting at the drive root |
+| `ext:` | `ext:mp4,mkv`, `ext:xls*`, `ext:none` | Extension; `none` is files without one |
+| `kind:` | `kind:video`, `kind:spreadsheet` | A group of extensions (see [Types](#types)); `type:video` works too |
+| `size:` | `size:>1GB`, `size:<10mb`, `size:100mb..2gb` | Size on disk, or a range |
+| `modified:` | `modified:2024`, `modified:>2024-06`, `modified:<30d` | A year/month/day, after or before one, or within / older than an age |
+| `older:` / `newer:` | `older:1y`, `newer:2w` | Modified more / less than `h`, `d`, `w`, `m`, `y` ago |
+| `before:` / `after:` | `before:2024-06` | Modified before / after a date |
 | `type:` | `type:dir`, `type:file` | Folders or files only |
+| `is:` | `is:empty`, `is:hidden`, `is:system`, `is:new` | Empty files and folders, attributes, or new since the last scan |
+| `files:` | `files:>1000` | Folders holding at least that many files |
 | `in:` | `in:downloads` | Inside a folder whose name contains this |
+| `under:` | `under:"C:\Users\me\Music"` | Inside exactly that folder |
+| `drive:` | `drive:c,d` | Only those drives |
+| `-` or `!` | `-ext:tmp`, `!in:node_modules` | Leave out anything matching |
+| `\|` or `OR` | `mp4\|mkv`, `ext:pdf\|docx`, `holiday OR vacation` | Either one |
+| `sort:` | `sort:size`, `small`, `name`, `newest`, `oldest`, `files` | Order of results (default: best name match, then size) |
 
-Enter opens the result in the list and chart; Shift+Enter shows it in Explorer. The
+The row under the search box picks where to look: all drives, the current drive, or
+the folder open in the chart. The **?** button lists the syntax; click an example to
+add it.
+
+Results can be selected: click their checkboxes, or press Tab to tick the highlighted
+one and move down. The checkbox above the results selects everything shown, then offers
+*Select all N* for every match (up to 10,000). Ctrl+Enter (or *Add to cart*) puts the
+selection in the cleanup cart.
+
+Enter opens a result in the list and chart; Shift+Enter shows it in Explorer. The
 palette also runs commands (rescan, switch views, theme, settings…).
+
+### Types
+
+The Types tab adds up the files in the drive, or in the folder open in Browse, by kind
+or by extension:
+
+| Kind | Extensions (examples) |
+|---|---|
+| Videos | mp4, mkv, avi, mov, webm, … |
+| Images | jpg, png, heic, webp, raw camera files, … |
+| Audio | mp3, flac, wav, m4a, … |
+| Documents | pdf, docx, txt, md, epub, … |
+| Spreadsheets | xlsx, xls, csv, tsv, ods, … |
+| Presentations | pptx, ppt, key, odp, … |
+| Archives | zip, rar, 7z, tar, gz, … |
+| Programs | exe, dll, msi, appx, jar, … |
+| System files | sys, drv, mui, cat, efi, … |
+| Code | js, ts, py, rs, json, html, … |
+| Disk images | iso, vhdx, vmdk, wim, … |
+| Databases | db, sqlite, mdf, accdb, … |
+| Design & 3D | psd, ai, fig, blend, stl, … |
+| Fonts, Email, Logs & temp | ttf, otf · pst, eml · log, tmp, dmp, … |
+
+Anything else is *Other*, and files without an extension have their own row. The bar
+at the top shows the split at a glance. Click any row to search for those files (in the
+same folder), biggest first, ready to select and add to the cart.
 
 ### Cleaning up
 
@@ -365,9 +416,14 @@ the tooltip stays put while other programs write files.
 
 ### Search
 
-The lowercase name buffer is split across cores and scanned with `memchr`. Each hit
-is then checked against the filters. Results are ranked by how well the name matches
-(exact, then prefix, then start of a word, then anywhere), then by size. Searching every drive takes milliseconds.
+The query is parsed into terms that all have to match; each term is a list of
+alternatives (from `|` or `OR`), and may be negated. Terms that only look at the node
+itself (name, size, date, kind) are checked first; those that walk up the parent
+folders (paths, `in:`, `under:`) only run for nodes that survive. Every node of every
+drive in scope is checked in parallel, with `memchr` for substrings and a small
+wildcard matcher for `*` and `?`. Results are ranked by how well the name matches
+(exact, then prefix, then start of a word, then anywhere), then by size, unless
+`sort:` says otherwise. Searching 1.4M files takes tens of milliseconds.
 
 ### Duplicate finder
 
@@ -404,7 +460,8 @@ crates/
       helper.rs         pipe protocol, client, task install/run
       snapshot.rs       save/load/prune .bulk files
       layout.rs         treemap and sunburst layouts, file-type categories
-      search.rs         query parser and parallel name search
+      search.rs         query language and parallel search
+      kinds.rs          file kinds by extension, storage per kind/extension
       diff.rs           snapshot vs live comparison
       dupes.rs          duplicate finder
       export.rs         HTML/CSV/JSON reports (folder, changes, duplicates)
@@ -434,7 +491,7 @@ src/                    Svelte 5 UI
   lib/app.svelte.ts     app state (drives, scans, selection, cart, toasts…)
   lib/api.ts            typed Tauri commands and binary decoders
   lib/components/       TitleBar, Sidebar, Explorer, TreeList, Treemap, Sunburst,
-                        DiffView, DupesView, CommandPalette, CartPanel, dialogs…
+                        DiffView, DupesView, TypesView, CommandPalette, CartPanel, dialogs…
 ```
 
 ---
