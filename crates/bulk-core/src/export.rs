@@ -292,6 +292,7 @@ ol li:first-child{border-top:0;padding-top:0}
 .bar{grid-column:2/4;height:4px;margin-top:3px;border-radius:2px;background:var(--track);overflow:hidden}
 .bar span{display:block;height:100%;border-radius:2px;background:var(--accent)}
 footer{margin-top:36px;display:flex;justify-content:space-between;color:var(--subtle);font-size:12px}
+footer a{color:var(--muted);text-decoration:none;font-weight:500}footer a:hover{color:var(--accent);text-decoration:underline}
 @media print{body{background:#fff}.card,.stat{box-shadow:none;break-inside:avoid}#tip{display:none}}
 "#;
 
@@ -491,7 +492,7 @@ pub fn write_html(
 <section class="card"><h2>Map <small>Hover a block for its path and size</small></h2><div class="map"><svg viewBox="0 0 {tw} {th}" role="img" aria-label="Treemap">{svg}</svg></div></section>
 <section class="card"><h2>File types</h2><div class="types">{bar}</div><ul class="legend">{legend}</ul></section>
 <div class="grid"><section class="card"><h2>Largest folders</h2><ol>{folders}</ol></section><section class="card"><h2>Largest files</h2><ol>{file_rows}</ol></section></div>
-<footer><span>Made with Bulk</span><span class="num">{date}</span></footer></main>
+<footer><span>Made with <a href="https://github.com/FunkyScientist/bulk" target="_blank" rel="noopener">Bulk</a></span><span class="num">{date}</span></footer></main>
 <div id="tip"></div><script>{js}</script></body></html>"#,
         css = REPORT_CSS,
         theme = theme.css(),
@@ -663,7 +664,7 @@ fn page(title: &str, subtitle: &str, stats: &str, body: &str, theme: &Theme) -> 
 <header><div><h1>{t}</h1><div class="path mono">{sub}</div></div></header>
 <section class="stats">{stats}</section>
 {body}
-<footer><span>Made with Bulk</span></footer></main></body></html>"#,
+<footer><span>Made with <a href="https://github.com/FunkyScientist/bulk" target="_blank" rel="noopener">Bulk</a></span></footer></main></body></html>"#,
         t = esc(title),
         sub = esc(subtitle),
         css = REPORT_CSS,
