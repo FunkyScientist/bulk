@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apply as applyTemplate, resolve as resolveTemplate } from '$lib/theme';
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { api } from '$lib/api';
@@ -26,7 +27,31 @@
   let rescan = $state(false);
 
   $effect(() => {
-    document.documentElement.dataset.theme = app.resolvedTheme;
+    const mode = app.resolvedTheme;
+    document.documentElement.dataset.theme = mode;
+    if (!app.templates.length) {
+      // Until the templates folder is read, reuse last time's colours so the
+      // window doesn't flash the default ones.
+      try {
+        const cached = JSON.parse(localStorage.getItem('bulk.colors') ?? 'null');
+        if (cached?.[mode]) applyTemplate(cached[mode]);
+      } catch {
+        // No cache yet; the stylesheet's default colours show.
+      }
+      return;
+    }
+    const base = app.templates.find((t) => t.id === 'default')?.data;
+    const data = app.template?.data;
+    const both = {
+      dark: resolveTemplate(data, base, 'dark'),
+      light: resolveTemplate(data, base, 'light'),
+    };
+    try {
+      localStorage.setItem('bulk.colors', JSON.stringify(both));
+    } catch {
+      // Storage can be unavailable; colours just apply a moment later next time.
+    }
+    applyTemplate(both[mode]);
   });
 
   onMount(async () => {

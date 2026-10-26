@@ -9,6 +9,11 @@
   import Columns2 from '@lucide/svelte/icons/columns-2';
   import Rows2 from '@lucide/svelte/icons/rows-2';
   import { bytes, count } from '$lib/format';
+  import { resolve } from '$lib/theme';
+  import Check from '@lucide/svelte/icons/check';
+  import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+  import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+  import type { TemplateInfo } from '$lib/api';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -22,12 +27,35 @@
     api.settingsGet().then((v) => (s = v));
     api.snapshotStorage().then((v) => (storage = v));
     api.appVersion().then((v) => (version = v));
+    void app.loadTemplates();
   });
+
+  /** What a template looks like in the current light/dark mode, for its card. */
+  function preview(t: TemplateInfo) {
+    const base = app.templates.find((x) => x.id === 'default')?.data;
+    const m = resolve(t.data, base, app.resolvedTheme);
+    const f = m.files;
+    return {
+      bg: m.ui['app-bg'],
+      panel: m.ui['panel-2'],
+      fg: m.ui.fg,
+      muted: m.ui['fg-subtle'],
+      accent: m.ui.accent,
+      accentFg: m.ui['accent-fg'],
+      swatches: [f.folder, f.video, f.image, f.document, f.code, f.archive],
+    };
+  }
+
+  async function reload() {
+    await app.loadTemplates();
+    app.toast(`${app.templates.length} colour templates`, { ms: 1500 });
+  }
 
   async function save(patch: Partial<Settings>) {
     if (!s) return;
     try {
-      s = await api.settingsSet({ ...s, ...patch });
+      // The template is picked through `app`, so take it from there.
+      s = await api.settingsSet({ ...s, ...patch, template: app.templateId });
     } catch (e) {
       app.toast(`Couldn't save settings: ${e}`, { tone: 'error' });
     }
@@ -129,6 +157,80 @@
                 aria-pressed={app.layout === o.k}
                 onclick={() => app.setLayout(o.k)}><o.I class="size-3.5" />{o.l}</button
               >
+            {/each}
+          </div>
+        </div>
+        <div class="mt-3">
+          <div class="flex items-center">
+            <div>
+              <div>Colours</div>
+              <div class="sub">Add your own by dropping a .json file in the templates folder.</div>
+            </div>
+            <div class="ml-auto flex items-center gap-1">
+              <button
+                class="pressable flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] text-fg-muted hover:bg-hover hover:text-fg"
+                title="Read the templates folder again"
+                onclick={reload}><RefreshCw class="size-3.5" /> Reload</button
+              >
+              <button
+                class="pressable flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] text-fg-muted hover:bg-hover hover:text-fg"
+                disabled={!app.templatesDir}
+                onclick={() => api.openPath(app.templatesDir)}
+                ><FolderOpen class="size-3.5" /> Open folder</button
+              >
+            </div>
+          </div>
+          <div class="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {#each app.templates as t (t.id)}
+              {@const on = app.template?.id === t.id}
+              {#if t.error}
+                <div
+                  class="flex flex-col gap-1 rounded-xl border border-dashed border-line p-2.5 text-[11.5px]"
+                  title={t.error}
+                >
+                  <span class="flex items-center gap-1.5 font-medium text-fg-muted">
+                    <TriangleAlert class="size-3.5 text-warn" />{t.id}.json
+                  </span>
+                  <span class="line-clamp-3 text-fg-subtle">{t.error}</span>
+                </div>
+              {:else}
+                {@const p = preview(t)}
+                <button
+                  class="card pressable flex flex-col overflow-hidden rounded-xl border text-left {on
+                    ? 'border-accent'
+                    : 'border-line hover:border-line-strong'}"
+                  aria-pressed={on}
+                  title={t.description || t.name}
+                  onclick={() => app.setTemplate(t.id)}
+                >
+                  <span class="relative block h-14 p-2" style="background: {p.bg}">
+                    <span class="flex gap-1">
+                      <span class="h-9 w-3 rounded" style="background: {p.panel}"></span>
+                      <span class="flex flex-1 flex-col gap-1">
+                        <span class="h-1.5 w-3/5 rounded-full" style="background: {p.fg}"></span>
+                        <span class="h-1.5 w-2/5 rounded-full" style="background: {p.muted}"></span>
+                        <span class="mt-auto flex gap-0.5">
+                          {#each p.swatches as c, i (i)}
+                            <span class="h-3 flex-1 rounded-sm" style="background: {c}"></span>
+                          {/each}
+                        </span>
+                      </span>
+                    </span>
+                    <span
+                      class="absolute top-2 right-2 grid size-4 place-items-center rounded-full"
+                      style="background: {p.accent}"
+                    >
+                      {#if on}<Check class="size-3" style="color: {p.accentFg}" />{/if}
+                    </span>
+                  </span>
+                  <span class="px-2.5 py-1.5">
+                    <span class="block truncate text-[12.5px] font-medium">{t.name}</span>
+                    <span class="block truncate text-[11px] text-fg-subtle"
+                      >{t.description || `${t.id}.json`}</span
+                    >
+                  </span>
+                </button>
+              {/if}
             {/each}
           </div>
         </div>

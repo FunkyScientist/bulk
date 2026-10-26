@@ -107,7 +107,7 @@ pub async fn snapshot_storage() -> StorageInfo {
 /// Windows silently redirects its `%LOCALAPPDATA%` writes into that package's
 /// folder. Explorer runs outside the package and would open the empty real
 /// folder, so find where a freshly written marker actually lands.
-fn redirected(path: &std::path::Path) -> Option<std::path::PathBuf> {
+pub(crate) fn redirected(path: &std::path::Path) -> Option<std::path::PathBuf> {
     let local = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?);
     let rest = path.strip_prefix(&local).ok()?;
     let marker = format!(".bulk-where-{}", std::process::id());

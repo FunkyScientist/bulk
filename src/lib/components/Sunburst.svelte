@@ -6,7 +6,7 @@
   import { nodeMenu } from '$lib/menus';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import Trash2 from '@lucide/svelte/icons/trash-2';
-  import { cartStripes, categoryColor, inkOn } from '$lib/palette';
+  import { branchColor, cartStripes, categoryColor, inkOn } from '$lib/palette';
   import { bytes, percent } from '$lib/format';
 
   let { letter }: { letter: string } = $props();
@@ -46,7 +46,7 @@
     void focus;
     void app.rowsVersion;
     void app.sort;
-    void app.resolvedTheme;
+    void app.themeKey;
     void app.cart;
     if (!width || !height) return;
     untrack(() => {
@@ -69,13 +69,13 @@
       !zooming &&
       arcs &&
       center &&
-      drawnTheme === app.resolvedTheme &&
+      drawnTheme === app.themeKey &&
       sameTiles(arcs, t) &&
       center.alloc === info.alloc &&
       center.size === info.size
     )
       return;
-    drawnTheme = app.resolvedTheme;
+    drawnTheme = app.themeKey;
     arcs = t;
     branch = branches(t);
     center = info;
@@ -101,17 +101,6 @@
     ready = true;
   }
 
-  /** Each top-level folder gets its own hue; everything inside it inherits it. */
-  const branchHues = [
-    '#8b7cff',
-    '#3fd0c9',
-    '#f5b544',
-    '#ff6b8b',
-    '#5fa8ff',
-    '#ff9a5a',
-    '#7ad67a',
-    '#c38bff',
-  ];
   let branch = new Uint8Array(0);
 
   function branches(t: Tiles) {
@@ -219,11 +208,11 @@
         ctx.fillStyle = css('--fg-subtle');
         ctx.globalAlpha = alpha * 0.18;
       } else if (f & TileFlags.DIR) {
-        ctx.fillStyle = branchHues[branch[i] % branchHues.length] ?? accent;
+        ctx.fillStyle = branchColor(branch[i]) ?? accent;
         ctx.globalAlpha =
           alpha * (f & TileFlags.COLLAPSED ? 0.3 : Math.max(0.35, 0.9 - (t.depth[i] - 1) * 0.11));
       } else {
-        ctx.fillStyle = categoryColor(t.cat[i], theme);
+        ctx.fillStyle = categoryColor(t.cat[i]);
         ctx.globalAlpha = alpha * (dark ? 0.82 : 0.88);
       }
       if (f & TileFlags.IN_CART) ctx.globalAlpha *= 0.45;
@@ -292,7 +281,7 @@
             : 'rgba(10,10,16,0.85)'
           : f & TileFlags.DIR || f & TileFlags.IN_CART
             ? 'rgba(16,16,24,0.88)'
-            : inkOn(categoryColor(t.cat[i], 'light'));
+            : inkOn(categoryColor(t.cat[i]));
         // Run the text along the arc, flipped on the lower half so it's never upside down.
         const am = mid - Math.PI / 2;
         const flip = mid > Math.PI / 2 && mid < (Math.PI * 3) / 2;

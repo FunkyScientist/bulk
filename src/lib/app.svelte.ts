@@ -6,6 +6,7 @@ import {
   type DeleteResult,
   type DupeGroup,
   type FilterInfo,
+  type TemplateInfo,
   type Drive,
   type HelperStatus,
   type Progress,
@@ -76,6 +77,12 @@ class AppState {
   focus = $state<Record<string, number | null>>({});
   /** Where the command palette searches; kept between openings. */
   searchScope = $state<'all' | 'drive' | 'folder'>('all');
+  /** Colour templates from the templates folder, and the one in use. */
+  templates = $state<TemplateInfo[]>([]);
+  templatesDir = $state('');
+  templateId = $state('default');
+  private templatesRev = $state(0);
+
   /** Browse filter per drive (a search query the list and charts are limited to). */
   filters = $state<Record<string, FilterInfo | null>>({});
   /** Whether the Browse filter bar is showing; bump `filterFocus` to focus it. */
@@ -103,6 +110,8 @@ class AppState {
   resolvedTheme = $derived<'dark' | 'light'>(
     this.theme === 'system' ? (this.systemDark ? 'dark' : 'light') : this.theme,
   );
+  /** Changes whenever the colours on screen do; charts redraw on it. */
+  themeKey = $derived(`${this.resolvedTheme}:${this.templateId}:${this.templatesRev}`);
 
   async init() {
     const mq = matchMedia('(prefers-color-scheme: dark)');
@@ -118,6 +127,8 @@ class AppState {
     // "Analyze with Bulk" from Explorer while we're already open.
     await listen<string>('open-path', (e) => void this.openPath(e.payload));
     this.cart = await api.cartGet();
+    this.templateId = (await api.settingsGet()).template || 'default';
+    void this.loadTemplates();
     const [drives, helper] = await Promise.all([api.drives(), api.helperStatus()]);
     this.drives = drives;
     if (this.helper === 'checking') this.helper = helper;
@@ -375,6 +386,33 @@ class AppState {
   setLayout(l: Layout) {
     this.layout = l;
     writePref('bulk.layout', l);
+  }
+
+  /** Read the templates folder again (new or edited files). */
+  async loadTemplates() {
+    const r = await api.templates();
+    this.templatesDir = r.dir;
+    this.templates = r.list;
+    this.templatesRev++;
+  }
+
+  /** The template in use, falling back to the default if its file went away. */
+  get template(): TemplateInfo | null {
+    const ok = (t: TemplateInfo | undefined) => (t && !t.error && t.data ? t : null);
+    return (
+      ok(this.templates.find((t) => t.id === this.templateId)) ??
+      ok(this.templates.find((t) => t.id === 'default'))
+    );
+  }
+
+  async setTemplate(id: string) {
+    this.templateId = id;
+    try {
+      const s = await api.settingsGet();
+      await api.settingsSet({ ...s, template: id });
+    } catch (e) {
+      this.toast(`Couldn't save the colour template: ${e}`, { tone: 'error' });
+    }
   }
 
   setTheme(t: ThemePref) {

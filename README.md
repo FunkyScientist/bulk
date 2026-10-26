@@ -279,12 +279,53 @@ from Google Fonts and fall back to the system font offline.
 | Setting | Default | |
 |---|---|---|
 | Theme | System | System, dark or light |
+| Colours | Bulk | A colour template (see below) |
 | Layout | Side by side | Chart beside or below the list |
 | Fast mode | On | Use the helper. Off = walk folders, no live updates; the helper stays set up so turning it back on needs no prompt |
 | Automatic snapshots | Off | Background snapshots via a scheduled task, which only exists while this is on |
 | How often | Daily | Daily or weekly |
 | Keep | 7 | Dated snapshots per drive |
 | "Analyze with Bulk" in Explorer | On | Right-click entry for folders and drives |
+
+### Colour templates
+
+Settings → Colours lists every template in `%LOCALAPPDATA%\Bulk\templates` (the
+*Open folder* button opens it). Bulk ships five:
+
+| Template | Look |
+|---|---|
+| Bulk | The original: soft violet on deep grey |
+| Fern | Fresh green on dark moss |
+| Tide | Clear ocean blue on midnight navy |
+| Ember | Warm amber on charcoal |
+| Graphite | Neutral greys with a white accent |
+
+To make your own, copy one of the files, rename it, edit the colours, and press
+*Reload* in Settings. Each template has a dark and a light half:
+
+```json
+{
+  "name": "My theme",
+  "description": "Shown under the name",
+  "dark": {
+    "ui": { "accent": "#ff5c8a", "app-bg": "#1a1014" },
+    "files": { "video": "#ff6b8b", "folder": "#ff5c8a" },
+    "branches": ["#ff5c8a", "#3fd0c9", "#f5b544"]
+  },
+  "light": { "ui": { "accent": "#d6336c" } }
+}
+```
+
+- **ui**: app colours (`app-bg`, `panel`, `fg`, `accent`, `line`, `danger`, …; the
+  full list is in the folder's `README.txt`).
+- **files**: file-type colours in the treemap, sunburst and Types tab (`folder`,
+  `video`, `image`, `document`, `spreadsheet`, `code`, …).
+- **branches**: the sunburst's colour for each top-level folder.
+
+Anything left out comes from the default, so a template can be a single accent
+colour. Values are any CSS colour. A file that isn't valid shows up in Settings with
+the reason. Bulk only writes its own five templates when they're missing, so your
+edits to them stick; delete one to get the original back.
 
 ---
 
@@ -521,6 +562,8 @@ src-tauri/              Bulk.exe backend
     cart.rs             cleanup cart, delete, undo
     dupes.rs            duplicate search commands
     settings.rs         settings commands, snapshot storage info
+    templates.rs        colour templates folder: shipped files, listing
+  templates/            the colour templates Bulk ships (JSON)
     shell.rs            Explorer menu, single instance, "--open"
     win.rs              Mica backdrop
   installer/hooks.nsh   NSIS install/uninstall hooks

@@ -38,6 +38,8 @@ pub struct Settings {
     pub history_keep: usize,
     /// "Analyze with Bulk" in Explorer's right-click menu.
     pub explorer_menu: bool,
+    /// Colour template: a file name (without `.json`) in the templates folder.
+    pub template: String,
 }
 
 impl Default for Settings {
@@ -49,6 +51,7 @@ impl Default for Settings {
             snapshot_every: Every::Daily,
             history_keep: 7,
             explorer_menu: true,
+            template: "default".into(),
         }
     }
 }

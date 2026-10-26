@@ -244,6 +244,30 @@ export interface TypesResult {
   exts: ExtStat[];
 }
 
+/** One light/dark half of a colour template. Everything is optional. */
+export interface TemplateMode {
+  ui?: Record<string, string>;
+  files?: Record<string, string>;
+  branches?: string[];
+}
+
+export interface TemplateData {
+  name?: string;
+  description?: string;
+  dark?: TemplateMode;
+  light?: TemplateMode;
+}
+
+/** A colour template file from the templates folder. */
+export interface TemplateInfo {
+  id: string;
+  name: string;
+  description: string;
+  data: TemplateData | null;
+  /** Why the file can't be used. */
+  error: string | null;
+}
+
 /** A search applied to Browse: what's left, and how big it is. */
 export interface FilterInfo {
   query: string;
@@ -312,6 +336,7 @@ export interface Settings {
   snapshotEvery: 'daily' | 'weekly';
   historyKeep: number;
   explorerMenu: boolean;
+  template: string;
 }
 
 export const api = {
@@ -342,6 +367,7 @@ export const api = {
   deleteNodes: (letter: string, ids: number[], permanent: boolean) =>
     invoke<DeleteResult>('delete_nodes', { letter, ids, permanent }),
   search: (query: string, scope: SearchScope) => invoke<SearchResult>('search', { query, scope }),
+  templates: () => invoke<{ dir: string; list: TemplateInfo[] }>('templates'),
   setFilter: (letter: string, query: string | null) =>
     invoke<FilterInfo | null>('set_filter', { letter, query }),
   getFilter: (letter: string) => invoke<FilterInfo | null>('get_filter', { letter }),

@@ -1,25 +1,81 @@
-/** File-type colours, indexed by the category the backend assigns (see layout.rs). */
-export const categories = [
-  { name: 'Folder', dark: '#8b7cff', light: '#6a58f5' },
-  { name: 'Other', dark: '#7d8496', light: '#9aa1b2' },
-  { name: 'Video', dark: '#ff6b8b', light: '#f0506f' },
-  { name: 'Images', dark: '#f5b544', light: '#e0a020' },
-  { name: 'Audio', dark: '#c38bff', light: '#a865f5' },
-  { name: 'Archives', dark: '#ff9a5a', light: '#f27c35' },
-  { name: 'Code', dark: '#3fd0c9', light: '#16b2aa' },
-  { name: 'Documents', dark: '#5fa8ff', light: '#3b88f0' },
-  { name: 'Programs', dark: '#9d92ff', light: '#7a6cf2' },
-  { name: 'Disk images', dark: '#f37bc4', light: '#e055a8' },
-  { name: 'Data & logs', dark: '#8fb3a8', light: '#6f9a8d' },
+/** Chart categories the backend assigns (see layout.rs), as file kinds. */
+const categoryKinds = [
+  'folder',
+  'other',
+  'video',
+  'image',
+  'audio',
+  'archive',
+  'code',
+  'document',
+  'program',
+  'diskimage',
+  'database',
 ] as const;
 
-export function categoryColor(cat: number, theme: 'dark' | 'light'): string {
-  return (categories[cat] ?? categories[1])[theme];
+/** Built-in colours, used for anything the colour template leaves out. */
+const builtIn: Record<string, string> = {
+  folder: '#8b7cff',
+  other: '#7d8496',
+  none: '#5c6273',
+  video: '#ff6b8b',
+  image: '#f5b544',
+  audio: '#c38bff',
+  document: '#5fa8ff',
+  spreadsheet: '#4fd18b',
+  presentation: '#ff8f6b',
+  archive: '#ff9a5a',
+  program: '#9d92ff',
+  system: '#8a93b8',
+  code: '#3fd0c9',
+  diskimage: '#f37bc4',
+  database: '#8fb3a8',
+  design: '#e8d26a',
+  font: '#b0a4ff',
+  email: '#6fc3ff',
+  log: '#a3a9b8',
+};
+const builtInBranches = [
+  '#8b7cff',
+  '#3fd0c9',
+  '#f5b544',
+  '#ff6b8b',
+  '#5fa8ff',
+  '#ff9a5a',
+  '#7ad67a',
+  '#c38bff',
+];
+
+let files: Record<string, string> = builtIn;
+let branchList: string[] = builtInBranches;
+
+/** Called by the colour template for the current light/dark mode. */
+export function setFileColors(f: Record<string, string> | undefined, b: string[] | undefined) {
+  files = { ...builtIn, ...f };
+  branchList = b?.length ? b : builtInBranches;
+}
+
+/** Colour of a file kind (see kinds.rs), for the Types tab. */
+export function kindColor(kind: string): string {
+  return files[kind] ?? files.other;
+}
+
+/** Colour of a chart tile's category. */
+export function categoryColor(cat: number): string {
+  return kindColor(categoryKinds[cat] ?? 'other');
+}
+
+/** Sunburst: one colour per top-level folder, repeating. */
+export function branchColor(i: number): string {
+  return branchList[i % branchList.length];
 }
 
 /** Readable label colour on top of a tile filled with `hex` (light theme). */
 export function inkOn(hex: string): string {
-  const n = parseInt(hex.slice(1), 16);
+  let h = hex.trim();
+  if (/^#[0-9a-f]{3}$/i.test(h)) h = '#' + [...h.slice(1)].map((c) => c + c).join('');
+  if (!/^#[0-9a-f]{6}$/i.test(h)) return 'rgba(16,16,24,0.9)';
+  const n = parseInt(h.slice(1), 16);
   const lin = (v: number) => {
     const c = v / 255;
     return c <= 0.04 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;

@@ -7,32 +7,13 @@
   import Funnel from '@lucide/svelte/icons/funnel';
   import { api, type TypesResult } from '$lib/api';
   import { app } from '$lib/app.svelte';
+  import { kindColor } from '$lib/palette';
   import { bytes, count } from '$lib/format';
 
   let { letter }: { letter: string } = $props();
 
-  /** Colours per kind, matching the chart where the groups overlap. */
-  const colors: Record<string, { dark: string; light: string }> = {
-    video: { dark: '#ff6b8b', light: '#f0506f' },
-    image: { dark: '#f5b544', light: '#e0a020' },
-    audio: { dark: '#c38bff', light: '#a865f5' },
-    document: { dark: '#5fa8ff', light: '#3b88f0' },
-    spreadsheet: { dark: '#4fd18b', light: '#22a861' },
-    presentation: { dark: '#ff8f6b', light: '#ef6a40' },
-    archive: { dark: '#ff9a5a', light: '#f27c35' },
-    program: { dark: '#9d92ff', light: '#7a6cf2' },
-    system: { dark: '#8a93b8', light: '#6c76a0' },
-    code: { dark: '#3fd0c9', light: '#16b2aa' },
-    diskimage: { dark: '#f37bc4', light: '#e055a8' },
-    database: { dark: '#8fb3a8', light: '#6f9a8d' },
-    design: { dark: '#e8d26a', light: '#c9ad2c' },
-    font: { dark: '#b0a4ff', light: '#8e80f0' },
-    email: { dark: '#6fc3ff', light: '#3aa5ee' },
-    log: { dark: '#a3a9b8', light: '#8b92a3' },
-    other: { dark: '#7d8496', light: '#9aa1b2' },
-    none: { dark: '#5c6273', light: '#b7bcc8' },
-  };
-  const color = (kind: string) => (colors[kind] ?? colors.other)[app.resolvedTheme];
+  // Re-read when the colour template or light/dark mode changes.
+  const color = $derived((kind: string) => (void app.themeKey, kindColor(kind)));
 
   let mode = $state<'kind' | 'ext'>('kind');
   // Start with the folder open in Browse, when there is one.

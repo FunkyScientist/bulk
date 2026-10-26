@@ -44,7 +44,7 @@
     void focus;
     void app.rowsVersion;
     void app.sort;
-    void app.resolvedTheme;
+    void app.themeKey;
     void app.cart;
     const w = width;
     const h = height;
@@ -65,8 +65,8 @@
     // Stale, or the component went away while the layout was loading.
     if (seq !== loadSeq || !base) return;
     const zooming = pending !== null || pendingOutFrom !== null;
-    if (!zooming && tiles && drawnTheme === app.resolvedTheme && sameTiles(tiles, t)) return;
-    drawnTheme = app.resolvedTheme;
+    if (!zooming && tiles && drawnTheme === app.themeKey && sameTiles(tiles, t)) return;
+    drawnTheme = app.themeKey;
     tiles = t;
     total = 0;
     for (let i = 0; i < t.count; i++) if (t.depth[i] === 1) total += t.value[i];
@@ -158,7 +158,7 @@
         ctx.fillStyle = accent;
         ctx.globalAlpha = dark ? 0.16 : 0.22;
       } else {
-        ctx.fillStyle = categoryColor(t.cat[i], theme);
+        ctx.fillStyle = categoryColor(t.cat[i]);
         ctx.globalAlpha = dark ? 0.82 : 0.88;
       }
       // Things in the cart fade back, so what stays stands out.
@@ -214,7 +214,7 @@
         }
       } else if (!(f & TileFlags.DIR) || f & TileFlags.COLLAPSED) {
         ctx.font = '500 11px "Geist Variable", sans-serif';
-        ctx.fillStyle = dark ? 'rgba(10,10,16,0.82)' : inkOn(categoryColor(t.cat[i], theme));
+        ctx.fillStyle = dark ? 'rgba(10,10,16,0.82)' : inkOn(categoryColor(t.cat[i]));
         if (f & TileFlags.DIR || f & TileFlags.IN_CART) ctx.fillStyle = fg;
         if (f & TileFlags.GONE) ctx.fillStyle = muted;
         const cy = h >= 32 ? y + h / 2 - 6 : y + h / 2;

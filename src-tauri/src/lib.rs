@@ -7,6 +7,7 @@ mod scan;
 mod settings;
 mod shell;
 mod state;
+mod templates;
 mod win;
 
 use tauri::Manager;
@@ -81,6 +82,7 @@ pub fn run() {
             dupes::dupes_start,
             dupes::dupes_cancel,
             settings::settings_get,
+            templates::templates,
             settings::settings_set,
             settings::snapshot_storage,
             shell::take_open_path,
