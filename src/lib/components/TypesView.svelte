@@ -4,6 +4,7 @@
   import HardDrive from '@lucide/svelte/icons/hard-drive';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import Search from '@lucide/svelte/icons/search';
+  import Funnel from '@lucide/svelte/icons/funnel';
   import { api, type TypesResult } from '$lib/api';
   import { app } from '$lib/app.svelte';
   import { bytes, count } from '$lib/format';
@@ -109,7 +110,13 @@
     return out.filter((s) => s.alloc / data!.alloc > 0.002);
   });
 
-  function open(r: Row) {
+  /** Show only these files in Browse: the list, treemap and sunburst. */
+  function filter(r: Row) {
+    void app.setFilter(letter, r.query);
+  }
+
+  /** List these files in the search palette, biggest first. */
+  function search(r: Row) {
     app.openSearch(`${r.query} sort:size`, inFolder && focus !== null ? 'folder' : 'drive');
   }
 </script>
@@ -186,10 +193,15 @@
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
       {#each shown as r (r.id)}
-        <button
-          class="row grid w-full grid-cols-[1fr_90px_90px_160px] items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-hover"
-          title="Find these files"
-          onclick={() => open(r)}
+        <div
+          class="row grid w-full cursor-pointer grid-cols-[1fr_90px_90px_160px] items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-hover"
+          role="button"
+          tabindex="0"
+          title="Show only these in Browse"
+          onclick={() => filter(r)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') filter(r);
+          }}
         >
           <span class="flex min-w-0 items-center gap-2.5">
             <span class="size-2.5 shrink-0 rounded-sm" style="background: {color(r.kind)}"></span>
@@ -205,7 +217,20 @@
                 >
               {/if}
             </span>
-            <Search class="go size-3.5 shrink-0 text-fg-subtle" />
+            <span class="go ml-auto flex shrink-0 items-center gap-0.5">
+              <span class="grid size-6 place-items-center text-fg-subtle" title="Show only these in Browse"
+                ><Funnel class="size-3.5" /></span
+              >
+              <button
+                class="grid size-6 place-items-center rounded-md text-fg-subtle hover:bg-panel-2 hover:text-fg"
+                title="Search for these files"
+                aria-label="Search for these files"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  search(r);
+                }}><Search class="size-3.5" /></button
+              >
+            </span>
           </span>
           <span class="tabular text-right text-fg-muted">{count(r.files)}</span>
           <span class="tabular text-right">{bytes(r.alloc)}</span>
@@ -220,7 +245,7 @@
               >{data.alloc ? ((r.alloc / data.alloc) * 100).toFixed(1) : '0.0'}%</span
             >
           </span>
-        </button>
+        </div>
       {/each}
       {#if rows.length > shown.length}
         <button

@@ -135,7 +135,7 @@ pub fn rows(state: State<AppState>, letter: char, start: usize, count: usize) ->
     let end = (start + count.min(500)).min(v.rows.len());
     let rows = v.rows[start.min(end)..end]
         .iter()
-        .map(|&(id, depth)| row(tree, id, depth, v.expanded.contains(&id)))
+        .map(|&(id, depth)| row(tree, id, depth, v.expanded.contains(&id), v.filter.as_ref()))
         .collect();
     Ok(RowsPage {
         total: v.rows.len(),
@@ -184,6 +184,51 @@ pub fn set_sort(state: State<AppState>, letter: char, key: Sort) -> Res<usize> {
         d.view.rebuild(tree);
     }
     Ok(d.view.rows.len())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilterInfo {
+    query: String,
+    matches: usize,
+    files: u32,
+    alloc: u64,
+}
+
+fn filter_info(d: &crate::state::Drive) -> Option<FilterInfo> {
+    let (f, tree) = (d.view.filter.as_ref()?, d.tree.as_ref()?);
+    let root = f.get(tree.root);
+    Some(FilterInfo {
+        query: f.query.clone(),
+        matches: f.matches,
+        files: root.files,
+        alloc: root.alloc,
+    })
+}
+
+/// Show only what matches `query` in the list and charts (`None` shows everything).
+#[tauri::command]
+pub async fn set_filter(
+    state: State<'_, AppState>,
+    letter: char,
+    query: Option<String>,
+) -> Res<Option<FilterInfo>> {
+    let mut drives = state.drives.lock().unwrap();
+    let d = drives.get_mut(&letter).ok_or("unknown drive")?;
+    let tree = d.tree.as_ref().ok_or("not scanned")?;
+    d.view.filter = query
+        .map(|q| q.trim().to_string())
+        .filter(|q| !q.is_empty())
+        .map(|q| bulk_core::filter::Filter::new(tree, &q, scan::now()));
+    d.view.rebuild(tree);
+    Ok(filter_info(d))
+}
+
+/// The drive's current filter, kept up to date as files change.
+#[tauri::command]
+pub fn get_filter(state: State<AppState>, letter: char) -> Option<FilterInfo> {
+    let drives = state.drives.lock().unwrap();
+    drives.get(&letter).and_then(filter_info)
 }
 
 /// Expand ancestors so `id` is visible; returns its row index.
@@ -291,23 +336,29 @@ pub struct NodeInfo {
 #[tauri::command]
 pub fn node_info(state: State<AppState>, letter: char, id: NodeId) -> Res<NodeInfo> {
     let drives = state.drives.lock().unwrap();
-    let tree = drives
-        .get(&letter)
-        .and_then(|d| d.tree.as_ref())
-        .ok_or("not scanned")?;
+    let d = drives.get(&letter).ok_or("unknown drive")?;
+    let tree = d.tree.as_ref().ok_or("not scanned")?;
     if id as usize >= tree.len() {
         return Err("bad node".into());
     }
     let n = tree.get(id);
+    // Sizes as shown: only what matches while Browse is filtered.
+    let (size, alloc, files) = match &d.view.filter {
+        Some(f) => {
+            let v = f.get(id);
+            (v.size, v.alloc, v.files)
+        }
+        None => (n.size, n.alloc, n.files),
+    };
     Ok(NodeInfo {
         id,
         name: tree.name(id).to_string(),
         path: tree.path(id),
         dir: n.is_dir(),
         flags: n.flags,
-        size: n.size,
-        alloc: n.alloc,
-        files: n.files,
+        size,
+        alloc,
+        files,
         mtime: n.mtime,
         parent: (n.parent != bulk_core::tree::NONE).then_some(n.parent),
     })
@@ -336,7 +387,8 @@ pub fn treemap(
         use_alloc: d.view.sort != SortKey::Size,
         ..Default::default()
     };
-    let tiles = treemap(tree, root, &opts);
+    let filter = d.view.filter.as_ref();
+    let tiles = treemap(tree, root, &opts, filter);
     let shapes = tiles.iter().map(|t| Shape {
         geom: [t.rect.x, t.rect.y, t.rect.w, t.rect.h],
         id: t.id,
@@ -352,6 +404,7 @@ pub fn treemap(
         shapes,
         opts.use_alloc,
         &carted,
+        filter,
     )))
 }
 
@@ -372,8 +425,16 @@ pub fn sunburst(
         .filter(|&r| (r as usize) < tree.len())
         .unwrap_or(tree.root);
     let use_alloc = d.view.sort != SortKey::Size;
-    let arcs =
-        bulk_core::layout::sunburst(tree, root, depth.clamp(1, 12), 0.0025, 20_000, use_alloc);
+    let filter = d.view.filter.as_ref();
+    let arcs = bulk_core::layout::sunburst(
+        tree,
+        root,
+        depth.clamp(1, 12),
+        0.0025,
+        20_000,
+        use_alloc,
+        filter,
+    );
     let shapes = arcs.iter().map(|a| Shape {
         geom: [a.a0, a.a1, 0.0, 0.0],
         id: a.id,
@@ -384,7 +445,7 @@ pub fn sunburst(
     });
     let carted = cart.nodes(letter, tree);
     Ok(tauri::ipc::Response::new(encode_shapes(
-        tree, shapes, use_alloc, &carted,
+        tree, shapes, use_alloc, &carted, filter,
     )))
 }
 
@@ -404,6 +465,7 @@ fn encode_shapes(
     shapes: impl Iterator<Item = Shape>,
     use_alloc: bool,
     carted: &HashSet<NodeId>,
+    filter: Option<&bulk_core::filter::Filter>,
 ) -> Vec<u8> {
     let mut body = Vec::new();
     let mut labels = Vec::new();
@@ -431,8 +493,7 @@ fn encode_shapes(
             }
         }
         body.extend_from_slice(&[s.depth, flags, s.category, 0]);
-        let n = tree.get(s.id);
-        let value = if use_alloc { n.alloc } else { n.size };
+        let value = bulk_core::layout::value(tree, filter, use_alloc, s.id);
         body.extend_from_slice(&value.to_le_bytes());
         if s.label {
             label_count += 1;

@@ -16,6 +16,8 @@
   import CopyIcon from '@lucide/svelte/icons/copy';
   import DupesView from './DupesView.svelte';
   import TypesView from './TypesView.svelte';
+  import FilterBar from './FilterBar.svelte';
+  import Funnel from '@lucide/svelte/icons/funnel';
   import Shapes from '@lucide/svelte/icons/shapes';
   import Share from '@lucide/svelte/icons/share';
   import { canExport, exportMenu } from '$lib/exporting';
@@ -64,6 +66,8 @@
     ]);
   }
   const scan = $derived(app.scans[drive.letter]);
+  const filtered = $derived(!!app.filters[drive.letter]);
+  const filterShown = $derived(filtered || app.filterOpen);
   const scanning = $derived(app.isScanning(drive.letter));
 
   const tabs = [
@@ -167,6 +171,23 @@
         </span>
       {/if}
       <button
+        class="pressable flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] {filtered
+          ? 'border-accent bg-accent-soft text-fg'
+          : 'border-line text-fg-muted hover:border-line-strong hover:text-fg'}"
+        title="Show only matching files in the list and chart (Ctrl Shift F)"
+        aria-pressed={filterShown}
+        onclick={() => {
+          app.tab = 'browse';
+          if (filterShown && !filtered) app.filterOpen = false;
+          else {
+            app.filterOpen = true;
+            app.filterFocus++;
+          }
+        }}
+      >
+        <Funnel class="size-3.5" /> Filter
+      </button>
+      <button
         class="pressable flex h-7 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[12px] text-fg-muted hover:border-line-strong hover:text-fg disabled:pointer-events-none disabled:opacity-40"
         disabled={!canExport(drive.letter)}
         title={app.tab === 'changes'
@@ -223,6 +244,9 @@
       <DiffView letter={drive.letter} method={drive.method} />
     </div>
   {:else}
+    {#if filterShown}
+      <FilterBar letter={drive.letter} total={drive.alloc} />
+    {/if}
     <div
       class="flex min-h-0 flex-1 {rows ? 'flex-col' : ''}"
       bind:this={body}

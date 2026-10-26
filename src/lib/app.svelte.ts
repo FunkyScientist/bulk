@@ -5,6 +5,7 @@ import {
   type CartItem,
   type DeleteResult,
   type DupeGroup,
+  type FilterInfo,
   type Drive,
   type HelperStatus,
   type Progress,
@@ -75,6 +76,11 @@ class AppState {
   focus = $state<Record<string, number | null>>({});
   /** Where the command palette searches; kept between openings. */
   searchScope = $state<'all' | 'drive' | 'folder'>('all');
+  /** Browse filter per drive (a search query the list and charts are limited to). */
+  filters = $state<Record<string, FilterInfo | null>>({});
+  /** Whether the Browse filter bar is showing; bump `filterFocus` to focus it. */
+  filterOpen = $state(false);
+  filterFocus = $state(0);
   /** Text for the command palette to open with. */
   searchRequest = $state<string | null>(null);
   /** Asks the tree list to expand to and scroll to a node. */
@@ -134,6 +140,8 @@ class AppState {
       const letters = [...this.pendingChanged];
       this.pendingChanged.clear();
       await this.refreshDrives();
+      for (const l of letters)
+        if (this.filters[l]) this.filters[l] = await api.getFilter(l);
       if (this.current && letters.includes(this.current) && !this.isScanning(this.current))
         this.rowsVersion++;
     }, 600);
@@ -223,6 +231,19 @@ class AppState {
   openMenu(e: MouseEvent, items: MenuItem[]) {
     e.preventDefault();
     this.menu = { x: e.clientX, y: e.clientY, items };
+  }
+
+  /** Limit Browse (list and charts) on `letter` to what matches `query`. */
+  async setFilter(letter: string, query: string | null) {
+    try {
+      const info = await api.setFilter(letter, query);
+      this.filters[letter] = info;
+      this.filterOpen = info !== null;
+      if (info) this.tab = 'browse';
+      this.rowsVersion++;
+    } catch (e) {
+      this.toast(`Couldn't filter: ${e}`, { tone: 'error' });
+    }
   }
 
   /** Open the command palette searching for `text`. */

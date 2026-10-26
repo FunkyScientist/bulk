@@ -50,6 +50,14 @@
   function onKey(e: KeyboardEvent) {
     const key = e.key.toLowerCase();
     const ctrl = e.ctrlKey && !e.altKey;
+    if (ctrl && e.shiftKey && key === 'f') {
+      e.preventDefault();
+      palette = false;
+      app.tab = 'browse';
+      app.filterOpen = true;
+      app.filterFocus++;
+      return;
+    }
     if (ctrl && (key === 'k' || key === 'f')) {
       e.preventDefault();
       palette = !palette;

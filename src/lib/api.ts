@@ -244,6 +244,14 @@ export interface TypesResult {
   exts: ExtStat[];
 }
 
+/** A search applied to Browse: what's left, and how big it is. */
+export interface FilterInfo {
+  query: string;
+  matches: number;
+  files: number;
+  alloc: number;
+}
+
 export interface SearchResult {
   total: number;
   elapsedMs: number;
@@ -334,6 +342,9 @@ export const api = {
   deleteNodes: (letter: string, ids: number[], permanent: boolean) =>
     invoke<DeleteResult>('delete_nodes', { letter, ids, permanent }),
   search: (query: string, scope: SearchScope) => invoke<SearchResult>('search', { query, scope }),
+  setFilter: (letter: string, query: string | null) =>
+    invoke<FilterInfo | null>('set_filter', { letter, query }),
+  getFilter: (letter: string) => invoke<FilterInfo | null>('get_filter', { letter }),
   searchIds: (query: string, scope: SearchScope) =>
     invoke<{ letter: string; ids: number[] }[]>('search_ids', { query, scope }),
   types: (letter: string, folder: number | null) =>

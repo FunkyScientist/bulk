@@ -93,7 +93,16 @@
       {/each}
     </div>
   </div>
-  <div class="min-h-0 flex-1 p-1.5">
+  <div class="relative min-h-0 flex-1 p-1.5">
+    {#if app.filters[letter]?.files === 0}
+      <div class="grid h-full place-items-center p-6 text-center text-fg-muted">
+        <div>
+          Nothing on {letter}: matches
+          <span class="font-mono text-fg">{app.filters[letter]?.query}</span>
+          <div class="mt-1 text-[12px] text-fg-subtle">Change or clear the filter above.</div>
+        </div>
+      </div>
+    {:else}
     {#key app.visual}
       <div class="h-full" in:fly={{ y: 6, duration: 240, easing: cubicOut }}>
         {#if app.visual === 'treemap'}
@@ -103,6 +112,7 @@
         {/if}
       </div>
     {/key}
+    {/if}
   </div>
 </div>
 

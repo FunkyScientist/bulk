@@ -279,6 +279,7 @@ pub fn write_html(
             min_folder_area: 400.0,
             ..Default::default()
         },
+        None,
     );
     let mut svg = String::new();
     for t in &tiles {
@@ -302,7 +303,11 @@ pub fn write_html(
             human(n.alloc),
             n.alloc as f64 / total as f64 * 100.0
         );
-        let class = if t.flags & tile_flags::DIR != 0 { "h" } else { "f" };
+        let class = if t.flags & tile_flags::DIR != 0 {
+            "h"
+        } else {
+            "f"
+        };
         let (show, dy) = if t.flags & tile_flags::HEADER != 0 {
             (true, 12.0)
         } else {
@@ -466,7 +471,11 @@ pub fn collect_changes(
         }
     }
     // Depth-first order with each folder's own row ahead of its contents.
-    out.sort_by(|a, b| a.path.to_ascii_lowercase().cmp(&b.path.to_ascii_lowercase()));
+    out.sort_by(|a, b| {
+        a.path
+            .to_ascii_lowercase()
+            .cmp(&b.path.to_ascii_lowercase())
+    });
     out
 }
 
@@ -587,12 +596,20 @@ pub fn write_changes_html(
     let delta = s.new_alloc as i64 - s.old_alloc as i64;
     let files = s.new_files as i64 - s.old_files as i64;
     let mut stats = String::new();
-    stats += &stat("Change", &signed(delta), if delta > 0 { "up" } else { "down" });
+    stats += &stat(
+        "Change",
+        &signed(delta),
+        if delta > 0 { "up" } else { "down" },
+    );
     stats += &stat("Now", &human(s.new_alloc), "");
     stats += &stat("Then", &human(s.old_alloc), "");
     stats += &stat(
         "Files",
-        &format!("{}{}", if files >= 0 { "+" } else { "−" }, thousands(files.unsigned_abs())),
+        &format!(
+            "{}{}",
+            if files >= 0 { "+" } else { "−" },
+            thousands(files.unsigned_abs())
+        ),
         "",
     );
 
@@ -657,7 +674,14 @@ pub fn write_dupes_csv(sets: &[DupeSet], out: impl Write) -> std::io::Result<()>
     w.write_all("\u{feff}set,path,size,modified\r\n".as_bytes())?;
     for (i, s) in sets.iter().enumerate() {
         for f in &s.files {
-            writeln!(w, "{},{},{},{}\r", i + 1, csv_field(&f.path), s.size, iso(f.mtime))?;
+            writeln!(
+                w,
+                "{},{},{},{}\r",
+                i + 1,
+                csv_field(&f.path),
+                s.size,
+                iso(f.mtime)
+            )?;
         }
     }
     w.flush()
@@ -665,14 +689,20 @@ pub fn write_dupes_csv(sets: &[DupeSet], out: impl Write) -> std::io::Result<()>
 
 pub fn write_dupes_json(scope: &str, sets: &[DupeSet], out: impl Write) -> std::io::Result<()> {
     let mut w = BufWriter::new(out);
-    let wasted: u64 = sets.iter().map(|s| s.size * (s.files.len() as u64 - 1)).sum();
+    let wasted: u64 = sets
+        .iter()
+        .map(|s| s.size * (s.files.len() as u64 - 1))
+        .sum();
     let v = serde_json::json!({ "scope": scope, "extraBytes": wasted, "sets": sets });
     serde_json::to_writer_pretty(&mut w, &v)?;
     w.flush()
 }
 
 pub fn write_dupes_html(scope: &str, sets: &[DupeSet], out: impl Write) -> std::io::Result<()> {
-    let wasted: u64 = sets.iter().map(|s| s.size * (s.files.len() as u64 - 1)).sum();
+    let wasted: u64 = sets
+        .iter()
+        .map(|s| s.size * (s.files.len() as u64 - 1))
+        .sum();
     let copies: usize = sets.iter().map(|s| s.files.len()).sum();
     let mut stats = String::new();
     stats += &stat("In extra copies", &human(wasted), "up");
@@ -743,7 +773,11 @@ mod tests {
         assert_eq!(rows[1].status, diff::Status::Added);
         let mut csv = Vec::new();
         write_changes_csv(&rows, &mut csv).unwrap();
-        assert!(String::from_utf8(csv).unwrap().contains("new.pdf\",file,added,0,4096,4096"));
+        assert!(
+            String::from_utf8(csv)
+                .unwrap()
+                .contains("new.pdf\",file,added,0,4096,4096")
+        );
     }
 
     #[test]

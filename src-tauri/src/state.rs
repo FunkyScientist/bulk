@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use bulk_core::filter::Filter;
 use bulk_core::scan::Progress;
 use bulk_core::snapshot::Meta;
 use bulk_core::tree::{NodeId, SortKey, Tree, flags};
@@ -83,6 +84,8 @@ pub struct View {
     pub expanded: HashSet<NodeId>,
     pub sort: SortKey,
     pub rows: Vec<(NodeId, u16)>,
+    /// Only show what matches this search, with folder sizes to match.
+    pub filter: Option<Filter>,
 }
 
 impl Default for View {
@@ -91,6 +94,7 @@ impl Default for View {
             expanded: HashSet::new(),
             sort: SortKey::Alloc,
             rows: Vec::new(),
+            filter: None,
         }
     }
 }
@@ -103,12 +107,30 @@ impl View {
     }
 
     pub fn rebuild(&mut self, tree: &Tree) {
+        if let Some(f) = &mut self.filter {
+            f.refresh(tree, crate::scan::now());
+        }
         self.rows.clear();
         let mut stack: Vec<(NodeId, u16)> = vec![(tree.root, 0)];
         while let Some((id, depth)) = stack.pop() {
             self.rows.push((id, depth));
             if self.expanded.contains(&id) {
-                let kids = tree.sorted_children_all(id, self.sort);
+                let mut kids = tree.sorted_children_all(id, self.sort);
+                if let Some(f) = &self.filter {
+                    kids.retain(|&k| f.shows(k));
+                    let by = |k: NodeId| {
+                        let v = f.get(k);
+                        match self.sort {
+                            SortKey::Size => v.size,
+                            SortKey::Alloc => v.alloc,
+                            SortKey::Files => v.files as u64,
+                            _ => 0,
+                        }
+                    };
+                    if matches!(self.sort, SortKey::Size | SortKey::Alloc | SortKey::Files) {
+                        kids.sort_by(|&a, &b| by(b).cmp(&by(a)).then(a.cmp(&b)));
+                    }
+                }
                 for &k in kids.iter().rev() {
                     stack.push((k, depth + 1));
                 }
@@ -155,12 +177,22 @@ pub struct Row {
     pub share: f32,
 }
 
-pub fn row(tree: &Tree, id: NodeId, depth: u16, open: bool) -> Row {
+pub fn row(tree: &Tree, id: NodeId, depth: u16, open: bool, filter: Option<&Filter>) -> Row {
     let n = tree.get(id);
+    let (size, alloc, files) = match filter {
+        Some(f) => {
+            let v = f.get(id);
+            (v.size, v.alloc, v.files)
+        }
+        None => (n.size, n.alloc, n.files),
+    };
     let parent_alloc = if n.parent == bulk_core::tree::NONE {
-        n.alloc
+        alloc
     } else {
-        tree.get(n.parent).alloc
+        match filter {
+            Some(f) => f.get(n.parent).alloc,
+            None => tree.get(n.parent).alloc,
+        }
     };
     Row {
         id,
@@ -168,16 +200,19 @@ pub fn row(tree: &Tree, id: NodeId, depth: u16, open: bool) -> Row {
         name: tree.name(id).to_string(),
         dir: n.is_dir(),
         flags: n.flags & !flags::DELETED,
-        size: n.size,
-        alloc: n.alloc,
-        files: n.files,
+        size,
+        alloc,
+        files,
         mtime: n.mtime,
-        has_kids: tree.has_children(id),
+        has_kids: match filter {
+            Some(f) => tree.children(id).any(|c| f.shows(c)),
+            None => tree.has_children(id),
+        },
         open,
         share: if parent_alloc == 0 {
             0.0
         } else {
-            (n.alloc as f64 / parent_alloc as f64) as f32
+            (alloc as f64 / parent_alloc as f64) as f32
         },
     }
 }

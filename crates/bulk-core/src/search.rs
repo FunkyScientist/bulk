@@ -2,7 +2,7 @@
 //! (AND); `|` or `OR` gives alternatives; `-` or `!` in front excludes.
 //!
 //! - `holiday 2023` words anywhere in the name; `"my notes"` keeps spaces
-//! - `labels_2026*.pdf` wildcards (`*`, `?`) match the whole name
+//! - `IMG_2024*.jpg` wildcards (`*`, `?`) match the whole name
 //! - `downloads/report` path pieces, folders in order (`C:/Users/…` starts at a drive)
 //! - `ext:mp4,mkv` / `ext:xls*` extension, `ext:none` files without one
 //! - `kind:video` (or `type:video`) a group of extensions, see `kinds`
@@ -54,7 +54,10 @@ struct Term {
 #[derive(Debug, Clone)]
 enum Cond {
     Name(Pat),
-    Path { segs: Vec<Pat>, anchored: bool },
+    Path {
+        segs: Vec<Pat>,
+        anchored: bool,
+    },
     Ext(Vec<Pat>),
     NoExt,
     Kind(Vec<usize>),
@@ -194,7 +197,9 @@ pub fn parse(text: &str, now: u64) -> Query {
         let mut last_key: Option<String> = None;
         for part in body.split('|').filter(|p| !p.is_empty()) {
             let (key, val) = match part.split_once(':') {
-                Some((k, v)) if is_key(&k.to_ascii_lowercase()) => (Some(k.to_ascii_lowercase()), v),
+                Some((k, v)) if is_key(&k.to_ascii_lowercase()) => {
+                    (Some(k.to_ascii_lowercase()), v)
+                }
                 _ => match &last_key {
                     Some(k) if listable(k) => (Some(k.clone()), part),
                     _ => (None, part),
@@ -314,7 +319,11 @@ fn keyed(q: &mut Query, key: &str, val: &str, now: u64) -> Option<Cond> {
         "after" => Cond::Time(Some(parse_date(&lower)?.0), None),
         "modified" | "date" => modified(&lower, now)?,
         "in" => Cond::Within(Pat::new(val, false)),
-        "under" => Cond::Under(val.trim_end_matches(['\\', '/']).replace('/', "\\").to_ascii_lowercase()),
+        "under" => Cond::Under(
+            val.trim_end_matches(['\\', '/'])
+                .replace('/', "\\")
+                .to_ascii_lowercase(),
+        ),
         "path" => bare(q, &format!("{}/", val.trim_end_matches(['/', '\\'])), false),
         "name" => Cond::Name(Pat::new(val, false)),
         "drive" => {
@@ -519,6 +528,31 @@ pub fn search(tree: &Tree, q: &Query, scope: Option<NodeId>, limit: usize) -> (V
     (hits, total)
 }
 
+/// Every node matching `q`, unordered.
+pub fn matching(tree: &Tree, q: &Query) -> Vec<NodeId> {
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let ctx = Ctx {
+        tree,
+        under: q
+            .terms
+            .iter()
+            .flat_map(|t| &t.any)
+            .filter_map(|c| match c {
+                Cond::Under(p) => Some((p.clone(), tree.find_path(p))),
+                _ => None,
+            })
+            .collect(),
+        scope: None,
+    };
+    (1..tree.len())
+        .into_par_iter()
+        .with_min_len(4096)
+        .filter_map(|i| matches(&ctx, i as NodeId, q).map(|_| i as NodeId))
+        .collect()
+}
+
 fn rank(tree: &Tree, sort: Sort, hits: &mut [Hit]) {
     let size = |h: &Hit| tree.get(h.id).alloc;
     let mtime = |h: &Hit| tree.get(h.id).mtime;
@@ -574,16 +608,18 @@ fn cond(ctx: &Ctx, id: NodeId, c: &Cond) -> Option<u8> {
         }
         Cond::NoExt => yes(!n.is_dir() && kinds::ext_of(name).is_none()),
         Cond::Kind(ks) => yes(!n.is_dir() && ks.contains(&kinds::kind_of(name))),
-        Cond::Size(a, b) => {
-            yes(a.is_none_or(|m| n.alloc >= m) && b.is_none_or(|m| n.alloc <= m))
-        }
+        Cond::Size(a, b) => yes(a.is_none_or(|m| n.alloc >= m) && b.is_none_or(|m| n.alloc <= m)),
         Cond::Time(a, b) => yes(a.is_none_or(|t| n.mtime >= t) && b.is_none_or(|t| n.mtime < t)),
-        Cond::Files(a, b) => yes(
-            n.is_dir() && a.is_none_or(|m| n.files as u64 >= m) && b.is_none_or(|m| n.files as u64 <= m),
-        ),
+        Cond::Files(a, b) => yes(n.is_dir()
+            && a.is_none_or(|m| n.files as u64 >= m)
+            && b.is_none_or(|m| n.files as u64 <= m)),
         Cond::Dir(d) => yes(n.is_dir() == *d),
         Cond::Flag(f) => yes(n.has(*f)),
-        Cond::Empty => yes(if n.is_dir() { n.files == 0 } else { n.size == 0 }),
+        Cond::Empty => yes(if n.is_dir() {
+            n.files == 0
+        } else {
+            n.size == 0
+        }),
         Cond::Within(p) => yes(tree.ancestors(id).any(|a| p.matches(tree.name_lower(a)))),
         Cond::Under(p) => {
             let folder = ctx.under.get(p).copied().flatten()?;
@@ -676,25 +712,31 @@ mod tests {
     fn globs_paths_and_logic() {
         let t = tree();
         assert_eq!(names(&t, "labels_2026*.pdf"), vec!["labels_2026_01.pdf"]);
-        assert_eq!(names(&t, "labels_202?_*"), vec![
-            "labels_2025_12.pdf",
-            "labels_2026_01.pdf",
-            "labels_2026_02.docx"
-        ]);
+        assert_eq!(
+            names(&t, "labels_202?_*"),
+            vec![
+                "labels_2025_12.pdf",
+                "labels_2026_01.pdf",
+                "labels_2026_02.docx"
+            ]
+        );
         assert_eq!(names(&t, "Downloads/report").len(), 1);
         assert_eq!(names(&t, r"users\downloads\labels").len(), 3);
         assert_eq!(names(&t, "C:/Users/Downloads/labels_2026").len(), 2);
         assert_eq!(names(&t, "C:/Downloads/labels").len(), 0);
         assert_eq!(names(&t, "downloads/").len(), 4);
         assert_eq!(names(&t, "labels -docx").len(), 2);
-        assert_eq!(names(&t, "labels ext:pdf|docx -2025"), vec![
-            "labels_2026_01.pdf",
-            "labels_2026_02.docx"
-        ]);
+        assert_eq!(
+            names(&t, "labels ext:pdf|docx -2025"),
+            vec!["labels_2026_01.pdf", "labels_2026_02.docx"]
+        );
         assert_eq!(names(&t, "holiday OR report").len(), 4);
         assert_eq!(names(&t, "\"report final\""), vec!["report final.xlsx"]);
         assert_eq!(names(&t, "kind:spreadsheet"), vec!["report final.xlsx"]);
-        assert_eq!(names(&t, "type:video"), vec!["holiday.mp4", "my holiday clip.mp4"]);
+        assert_eq!(
+            names(&t, "type:video"),
+            vec!["holiday.mp4", "my holiday clip.mp4"]
+        );
         assert_eq!(names(&t, "is:empty type:dir"), vec!["empty"]);
         assert_eq!(names(&t, "modified:2023 holiday").len(), 2);
         assert_eq!(names(&t, "under:C:/Users ext:pdf").len(), 2);

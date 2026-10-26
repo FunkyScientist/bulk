@@ -4,6 +4,7 @@
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
+use crate::filter::Filter;
 use crate::tree::{NodeId, Tree, flags};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -104,11 +105,27 @@ impl Ord for Pending {
     }
 }
 
-pub fn treemap(tree: &Tree, root: NodeId, o: &TreemapOptions) -> Vec<Tile> {
-    let value = |id: NodeId| {
-        let n = tree.get(id);
-        if o.use_alloc { n.alloc } else { n.size }
-    };
+/// Size of `id` for drawing: on disk or actual, and only what matches `filter`.
+pub fn value(tree: &Tree, filter: Option<&Filter>, use_alloc: bool, id: NodeId) -> u64 {
+    match filter {
+        Some(f) => {
+            let v = f.get(id);
+            if use_alloc { v.alloc } else { v.size }
+        }
+        None => {
+            let n = tree.get(id);
+            if use_alloc { n.alloc } else { n.size }
+        }
+    }
+}
+
+pub fn treemap(
+    tree: &Tree,
+    root: NodeId,
+    o: &TreemapOptions,
+    filter: Option<&Filter>,
+) -> Vec<Tile> {
+    let value = |id: NodeId| value(tree, filter, o.use_alloc, id);
     let mut tiles = Vec::with_capacity(o.max_tiles.min(32_768));
     let mut heap = BinaryHeap::new();
     let full = Rect {
@@ -164,7 +181,11 @@ pub fn treemap(tree: &Tree, root: NodeId, o: &TreemapOptions) -> Vec<Tile> {
                 continue;
             }
             let n = tree.get(id);
-            let is_dir = n.is_dir() && tree.has_children(id);
+            let is_dir = n.is_dir()
+                && match filter {
+                    Some(f) => tree.children(id).any(|c| f.shows(c)),
+                    None => tree.has_children(id),
+                };
             let mut f = 0;
             if n.is_dir() {
                 f |= tile_flags::DIR;
@@ -237,11 +258,9 @@ pub fn sunburst(
     min_angle: f32,
     max_arcs: usize,
     use_alloc: bool,
+    filter: Option<&Filter>,
 ) -> Vec<Arc> {
-    let value = |id: NodeId| {
-        let n = tree.get(id);
-        if use_alloc { n.alloc } else { n.size }
-    };
+    let value = |id: NodeId| value(tree, filter, use_alloc, id);
     let mut out = Vec::new();
     let mut stack = vec![(root, 0.0f64, std::f64::consts::TAU, 0u8)];
     let mut kids: Vec<(NodeId, u64)> = Vec::new();
@@ -270,7 +289,11 @@ pub fn sunburst(
                 break; // sorted, so the rest are smaller still
             }
             let n = tree.get(c);
-            let opens = n.is_dir() && tree.has_children(c) && depth + 1 < max_depth;
+            let has_kids = match filter {
+                Some(f) => tree.children(c).any(|k| f.shows(k)),
+                None => tree.has_children(c),
+            };
+            let opens = n.is_dir() && has_kids && depth + 1 < max_depth;
             let mut f = 0;
             if n.is_dir() {
                 f |= tile_flags::DIR;
@@ -456,7 +479,7 @@ mod tests {
         t.add(a, "x.bin", 0, 0, 300, 0, 0);
         t.add(t.root, "b.bin", 0, 0, 100, 0, 0);
         t.aggregate();
-        let arcs = sunburst(&t, t.root, 4, 0.0, 100, true);
+        let arcs = sunburst(&t, t.root, 4, 0.0, 100, true, None);
         assert_eq!(arcs.len(), 3);
         let top: Vec<_> = arcs.iter().filter(|a| a.depth == 1).collect();
         assert!((top[0].a1 - top[0].a0 - std::f32::consts::TAU * 0.75).abs() < 1e-4);
@@ -480,7 +503,7 @@ mod tests {
             max_tiles: 500,
             ..Default::default()
         };
-        let tiles = treemap(&t, t.root, &o);
+        let tiles = treemap(&t, t.root, &o, None);
         assert!(tiles.len() <= 500 + 200);
         assert!(
             tiles
