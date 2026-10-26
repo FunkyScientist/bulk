@@ -140,8 +140,8 @@ pub async fn export_changes(
     format: crate::commands::ExportFormat,
     path: PathBuf,
 ) -> Res<()> {
-    use bulk_core::export::{self, ChangeSummary};
     use crate::commands::ExportFormat;
+    use bulk_core::export::{self, ChangeSummary};
     // Collect under the lock (it's quick); write the file without it.
     let (summary, rows) = {
         let drives = state.drives.lock().unwrap();
@@ -183,8 +183,8 @@ pub async fn export_dupes(
     format: crate::commands::ExportFormat,
     path: PathBuf,
 ) -> Res<()> {
-    use bulk_core::export;
     use crate::commands::ExportFormat;
+    use bulk_core::export;
     let sets: Vec<_> = sets.into_iter().filter(|s| s.files.len() > 1).collect();
     tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<()> {
         let file = std::fs::File::create(&path)?;

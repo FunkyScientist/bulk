@@ -269,10 +269,7 @@ fn apply_one(
             if n.parent != parent && !tree.is_ancestor(id, parent) {
                 // Deleting in Explorer is a move into the Recycle Bin; show it as
                 // deleted where it was.
-                if in_recycle_bin(tree, parent)
-                    && !in_recycle_bin(tree, id)
-                    && !n.has(flags::NEW)
-                {
+                if in_recycle_bin(tree, parent) && !in_recycle_bin(tree, id) && !n.has(flags::NEW) {
                     tree.leave_ghost(id);
                 }
                 tree.move_to(id, parent);
@@ -379,7 +376,10 @@ mod tests {
         );
         assert_eq!(t.get(docs).size, 0);
         assert_eq!(t.children(docs).count(), 0);
-        let ghosts: Vec<_> = t.children_all(docs).map(|g| t.name(g).to_string()).collect();
+        let ghosts: Vec<_> = t
+            .children_all(docs)
+            .map(|g| t.name(g).to_string())
+            .collect();
         assert_eq!(ghosts.len(), 2);
         assert!(ghosts.iter().all(|n| n == "a.txt" || n == "b.txt"));
         assert_eq!(t.get(a).parent, bin);

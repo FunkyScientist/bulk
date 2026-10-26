@@ -242,8 +242,7 @@ impl Client {
                 .open(&self.pipe);
             match r {
                 Err(e)
-                    if e.raw_os_error() == Some(ERROR_PIPE_BUSY)
-                        && Instant::now() < deadline =>
+                    if e.raw_os_error() == Some(ERROR_PIPE_BUSY) && Instant::now() < deadline =>
                 {
                     std::thread::sleep(Duration::from_millis(20));
                 }

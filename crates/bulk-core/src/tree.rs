@@ -484,7 +484,15 @@ impl Tree {
         let mut stack = vec![(from, parent)];
         while let Some((sid, dest)) = stack.pop() {
             let n = *sub.get(sid);
-            let id = self.add(dest, sub.name(sid), n.flags, n.size, n.alloc, n.mtime, n.frn);
+            let id = self.add(
+                dest,
+                sub.name(sid),
+                n.flags,
+                n.size,
+                n.alloc,
+                n.mtime,
+                n.frn,
+            );
             stack.extend(sub.children(sid).map(|c| (c, id)));
         }
     }

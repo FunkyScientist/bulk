@@ -177,7 +177,11 @@ pub fn helper_ready(app: &AppHandle) -> bool {
 }
 
 #[derive(Serialize, Clone)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ScanEvent {
     Started {
         method: &'static str,
@@ -288,9 +292,8 @@ pub fn start_folder(
             return Err("not a folder".into());
         }
         // Walking a huge folder takes longer than reading the whole file table.
-        let via_helper = d.vol.is_ntfs()
-            && tree.get(folder).files > HELPER_FOLDER_FILES
-            && helper_ready(&app);
+        let via_helper =
+            d.vol.is_ntfs() && tree.get(folder).files > HELPER_FOLDER_FILES && helper_ready(&app);
         let p = Arc::new(Progress::default());
         d.scan = Some(p.clone());
         (tree.path(folder), d.vol.cluster as u64, p, via_helper)

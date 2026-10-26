@@ -58,7 +58,9 @@ pub const KINDS: &[Kind] = &[
     Kind {
         key: "presentation",
         label: "Presentations",
-        exts: &["ppt", "pptx", "pptm", "pps", "ppsx", "pot", "potx", "odp", "key"],
+        exts: &[
+            "ppt", "pptx", "pptm", "pps", "ppsx", "pot", "potx", "odp", "key",
+        ],
     },
     Kind {
         key: "archive",
@@ -71,8 +73,22 @@ pub const KINDS: &[Kind] = &[
         key: "program",
         label: "Programs",
         exts: &[
-            "exe", "dll", "msi", "msix", "msixbundle", "appx", "appxbundle", "msp", "so", "lib",
-            "ocx", "node", "apk", "jar", "pyd", "asar",
+            "exe",
+            "dll",
+            "msi",
+            "msix",
+            "msixbundle",
+            "appx",
+            "appxbundle",
+            "msp",
+            "so",
+            "lib",
+            "ocx",
+            "node",
+            "apk",
+            "jar",
+            "pyd",
+            "asar",
         ],
     },
     Kind {
@@ -130,8 +146,19 @@ pub const KINDS: &[Kind] = &[
         key: "log",
         label: "Logs & temp",
         exts: &[
-            "log", "etl", "evtx", "tmp", "temp", "dmp", "mdmp", "cache", "bak", "old", "blf",
-            "regtrans-ms", "chk",
+            "log",
+            "etl",
+            "evtx",
+            "tmp",
+            "temp",
+            "dmp",
+            "mdmp",
+            "cache",
+            "bak",
+            "old",
+            "blf",
+            "regtrans-ms",
+            "chk",
         ],
     },
 ];
@@ -360,6 +387,9 @@ mod tests {
         let only_a = breakdown(&t, a);
         assert_eq!(only_a.files, 3);
         assert_eq!(find_kind("Videos"), Some(0));
-        assert_eq!(find_kind("sheet"), KINDS.iter().position(|k| k.key == "spreadsheet"));
+        assert_eq!(
+            find_kind("sheet"),
+            KINDS.iter().position(|k| k.key == "spreadsheet")
+        );
     }
 }
