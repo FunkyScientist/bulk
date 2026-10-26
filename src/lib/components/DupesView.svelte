@@ -8,7 +8,6 @@
   import ShoppingCart from '@lucide/svelte/icons/shopping-cart';
   import { api, type DupeGroup, type DupesEvent } from '$lib/api';
   import { app } from '$lib/app.svelte';
-  import FilterChip from './FilterChip.svelte';
   import { bytes, count, date, duration } from '$lib/format';
 
   let { letter }: { letter: string } = $props();
@@ -154,7 +153,6 @@
           : `Only ${folderPath || folderName || 'the open folder'}`}
       </span>
     </label>
-    <FilterChip {letter} />
     <div class="ml-auto">
       {#if running}
         <button

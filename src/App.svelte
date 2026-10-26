@@ -53,7 +53,7 @@
     if (ctrl && e.shiftKey && key === 'f') {
       e.preventDefault();
       palette = false;
-      app.tab = 'browse';
+      if (app.tab === 'types') app.tab = 'browse';
       app.filterOpen = true;
       app.filterFocus++;
       return;

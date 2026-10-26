@@ -170,11 +170,11 @@
         class="pressable flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] {filtered
           ? 'border-accent bg-accent-soft text-fg'
           : 'border-line text-fg-muted hover:border-line-strong hover:text-fg'}"
-        title="Show only matching files in the list and chart (Ctrl Shift F)"
+        title="Show only matching files in Browse, Changes and Duplicates (Ctrl Shift F)"
         aria-pressed={filterShown}
         onclick={() => {
-          app.tab = 'browse';
-          if (filterShown && !filtered) app.filterOpen = false;
+          if (app.tab === 'types') app.tab = 'browse';
+          else if (filterShown && !filtered) app.filterOpen = false;
           else {
             app.filterOpen = true;
             app.filterFocus++;
@@ -227,6 +227,9 @@
     </div>
   </div>
 
+  {#if filterShown && app.tab !== 'types'}
+    <FilterBar letter={drive.letter} total={drive.alloc} />
+  {/if}
   {#if app.tab === 'types'}
     <div class="min-h-0 flex-1">
       <TypesView letter={drive.letter} />
@@ -240,9 +243,6 @@
       <DiffView letter={drive.letter} method={drive.method} />
     </div>
   {:else}
-    {#if filterShown}
-      <FilterBar letter={drive.letter} total={drive.alloc} />
-    {/if}
     <div
       class="flex min-h-0 flex-1 {rows ? 'flex-col' : ''}"
       bind:this={body}

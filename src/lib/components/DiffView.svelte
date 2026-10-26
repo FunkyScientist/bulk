@@ -1,5 +1,4 @@
 <script lang="ts">
-  import FilterChip from './FilterChip.svelte';
   import { onDestroy, untrack } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -218,7 +217,6 @@
             )}
           </div>
           <div class="mt-1.5 flex items-center gap-2 text-[12px]">
-            <FilterChip {letter} />
             {#if scope !== null}
               <span
                 class="flex min-w-0 items-center gap-1.5 rounded-md bg-accent-soft px-2 py-0.5 text-fg"

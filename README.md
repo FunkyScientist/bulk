@@ -176,10 +176,10 @@ how many files match and how much space they take. Esc or ✕ clears it.
 
 A filter can also come from elsewhere: *Filter Browse* in the search palette (Alt+Enter)
 uses the current search, and clicking a row in Types filters to that type or extension.
-The filter stays while files change and across rescans, and it carries over:
+The filter stays while files change and across rescans. The bar also shows on the
+Changes and Duplicates tabs, so you can set or change it there:
 
-- **Changes** only compares matching files (an *Only …* chip shows it; its ✕ clears
-  the filter).
+- **Changes** only compares matching files.
 - **Duplicates** only looks among matching files.
 - **Export** writes only what matches, from any tab, and the report says so.
 

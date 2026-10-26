@@ -233,13 +233,14 @@ class AppState {
     this.menu = { x: e.clientX, y: e.clientY, items };
   }
 
-  /** Limit Browse (list and charts) on `letter` to what matches `query`. */
+  /** Limit Browse, Changes and Duplicates on `letter` to what matches `query`. */
   async setFilter(letter: string, query: string | null) {
     try {
       const info = await api.setFilter(letter, query);
       this.filters[letter] = info;
       this.filterOpen = info !== null;
-      if (info) this.tab = 'browse';
+      // Types has nothing to filter; show the result in Browse.
+      if (info && this.tab === 'types') this.tab = 'browse';
       this.rowsVersion++;
     } catch (e) {
       this.toast(`Couldn't filter: ${e}`, { tone: 'error' });

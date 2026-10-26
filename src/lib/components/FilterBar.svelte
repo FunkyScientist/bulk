@@ -51,7 +51,7 @@
     bind:this={input}
     bind:value={text}
     class="h-7 min-w-0 flex-1 rounded-md border border-line bg-transparent px-2 font-mono text-[12px] outline-none placeholder:font-sans placeholder:text-fg-subtle focus:border-accent"
-    placeholder="Filter the list and chart, like search: kind:video size:>100MB -in:appdata"
+    placeholder="Show only matching files, like search: kind:video size:>100MB -in:appdata"
     spellcheck="false"
     autocomplete="off"
     onkeydown={(e) => {
