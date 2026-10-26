@@ -385,8 +385,11 @@ fn serve(user: Option<String>) -> anyhow::Result<()> {
             loop {
                 std::thread::sleep(Duration::from_secs(1));
                 let idle = a.start.elapsed().as_secs() - a.last.load(Ordering::Relaxed);
-                if a.active.load(Ordering::Relaxed) == 0
-                    && (idle >= IDLE_EXIT.as_secs() || a.apps_gone())
+                // Connections only serve apps, so once they're all gone nothing is
+                // left to answer; a watch on a quiet drive can sit in a journal
+                // read until something changes, so don't wait for it to notice.
+                if a.apps_gone()
+                    || (a.active.load(Ordering::Relaxed) == 0 && idle >= IDLE_EXIT.as_secs())
                 {
                     std::process::exit(0);
                 }
