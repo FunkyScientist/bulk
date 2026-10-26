@@ -127,10 +127,11 @@
     const fg = css('--fg');
     const muted = css('--fg-muted');
     const accent = css('--accent');
-    const danger = css('--danger');
+    const labelInk = css('--chart-label');
+    const cart = css('--cart');
     const cartRoots: number[] = [];
     const added: number[] = [];
-    const ok = css('--ok');
+    const newColor = css('--added');
     ctx.textBaseline = 'middle';
 
     for (let i = 0; i < t.count; i++) {
@@ -152,7 +153,7 @@
         ctx.globalAlpha = dark ? 0.1 : 0.12;
       } else if (f & TileFlags.DIR && !(f & TileFlags.COLLAPSED)) {
         // Nested folders stack, so keep each layer faint.
-        ctx.fillStyle = dark ? 'rgba(255,255,255,0.028)' : 'rgba(20,20,60,0.03)';
+        ctx.fillStyle = css('--chart-folder');
       } else if (f & TileFlags.DIR) {
         // Folder too small (or too busy) to open up: a quiet block of its own colour.
         ctx.fillStyle = accent;
@@ -178,7 +179,7 @@
       ctx.globalAlpha = 1;
       // Stripe leaves only: stripes on nested folders would stack up.
       if (f & TileFlags.IN_CART && (!(f & TileFlags.DIR) || f & TileFlags.COLLAPSED)) {
-        ctx.fillStyle = cartStripes(ctx, danger);
+        ctx.fillStyle = cartStripes(ctx, cart);
         ctx.globalAlpha = dark ? 0.32 : 0.28;
         ctx.fillRect(rx, ry, rw, rh);
         ctx.globalAlpha = 1;
@@ -214,7 +215,7 @@
         }
       } else if (!(f & TileFlags.DIR) || f & TileFlags.COLLAPSED) {
         ctx.font = '500 11px "Geist Variable", sans-serif';
-        ctx.fillStyle = dark ? 'rgba(10,10,16,0.82)' : inkOn(categoryColor(t.cat[i]));
+        ctx.fillStyle = labelInk === 'auto' ? inkOn(categoryColor(t.cat[i])) : labelInk;
         if (f & TileFlags.DIR || f & TileFlags.IN_CART) ctx.fillStyle = fg;
         if (f & TileFlags.GONE) ctx.fillStyle = muted;
         const cy = h >= 32 ? y + h / 2 - 6 : y + h / 2;
@@ -228,9 +229,9 @@
       }
     }
 
-    // New since the last scan: a green outline and a corner dot, on top of their contents.
-    ctx.strokeStyle = ok;
-    ctx.fillStyle = ok;
+    // New since the last scan: an outline and a corner dot, on top of their contents.
+    ctx.strokeStyle = newColor;
+    ctx.fillStyle = newColor;
     ctx.lineWidth = 1.5;
     for (const i of added) {
       const w = t.w[i] - 1.5;
@@ -247,7 +248,7 @@
     }
 
     // Outline whatever was added to the cart, on top of everything inside it.
-    ctx.strokeStyle = danger;
+    ctx.strokeStyle = cart;
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 3]);
     for (const i of cartRoots) {
@@ -261,20 +262,20 @@
     ctx.setLineDash([]);
   }
 
-  let hatchCache: { ctx: CanvasRenderingContext2D; dark: boolean; pattern: CanvasPattern } | null =
+  let hatchCache: { ctx: CanvasRenderingContext2D; key: string; pattern: CanvasPattern } | null =
     null;
   function hatch(ctx: CanvasRenderingContext2D, dark: boolean) {
-    if (hatchCache?.ctx === ctx && hatchCache.dark === dark) return hatchCache.pattern;
+    if (hatchCache?.ctx === ctx && hatchCache.key === app.themeKey) return hatchCache.pattern;
     const c = new OffscreenCanvas(6, 6);
     const g = c.getContext('2d')!;
-    g.strokeStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(20,20,60,0.08)';
+    g.strokeStyle = css('--chart-hatch');
     g.lineWidth = 1;
     g.beginPath();
     g.moveTo(0, 6);
     g.lineTo(6, 0);
     g.stroke();
     const pattern = ctx.createPattern(c, 'repeat')!;
-    hatchCache = { ctx, dark, pattern };
+    hatchCache = { ctx, key: app.themeKey, pattern };
     return pattern;
   }
 
@@ -361,13 +362,12 @@
       ctx.beginPath();
       ctx.roundRect(x, y, Math.max(1, w), Math.max(1, h), Math.min(4, w / 4, h / 4));
       if (kind === 'hover') {
-        const dark = app.resolvedTheme === 'dark';
-        ctx.fillStyle = dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.3)';
+        ctx.fillStyle = css('--chart-hover');
         ctx.fill();
-        ctx.strokeStyle = dark ? 'rgba(255,255,255,0.85)' : 'rgba(16,16,24,0.55)';
+        ctx.strokeStyle = css('--chart-hover-line');
         ctx.lineWidth = 1.5;
       } else {
-        ctx.strokeStyle = app.resolvedTheme === 'dark' ? '#fff' : '#17171d';
+        ctx.strokeStyle = css('--chart-select');
         ctx.lineWidth = 2;
         ctx.shadowColor = css('--accent');
         ctx.shadowBlur = 10;
@@ -568,13 +568,13 @@
         {#if total > 0}<span class="text-fg-subtle"> · {percent(tip.value / total)}</span>{/if}
       </div>
       {#if tip.gone}
-        <div class="mt-0.5 text-[11.5px] text-danger">Deleted</div>
+        <div class="mt-0.5 text-[11.5px] text-removed">Deleted</div>
       {:else if tip.cart}
-        <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-danger">
+        <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-cart">
           <Trash2 class="size-3" /> In cleanup cart
         </div>
       {:else if tip.added}
-        <div class="mt-0.5 text-[11.5px] text-ok">New since the last scan</div>
+        <div class="mt-0.5 text-[11.5px] text-added">New since the last scan</div>
       {/if}
     </div>
   {/if}

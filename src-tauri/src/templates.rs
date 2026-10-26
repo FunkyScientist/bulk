@@ -36,16 +36,43 @@ Anything you leave out comes from the default template, so a template can be as
 small as {\"name\": \"Red\", \"dark\": {\"ui\": {\"accent\": \"#ff5555\"}}}.
 Colours are any CSS colour: #rrggbb, rgb(), rgba(), hsl()...
 
-ui         app-bg, app-tint, sidebar-tint, panel, panel-2, popover, hover, line,
-           line-strong, fg, fg-muted, fg-subtle, switch-off, accent, accent-fg,
-           accent-soft, danger, ok, warn, shadow (a CSS box-shadow)
+ui         Window and text
+             app-bg, app-tint, sidebar-tint, panel, panel-2, popover, hover,
+             line, line-strong, fg, fg-muted, fg-subtle, shadow (a box-shadow),
+             backdrop (behind dialogs)
+           Accent and controls
+             accent, accent-fg, accent-soft, switch-off, switch-knob, bar-end
+             (end of the size bars' gradient)
+           Messages
+             danger, danger-fg (text on danger buttons), ok, warn
+           Drive usage
+             usage, usage-low (under 10% free), usage-full (under 5% free)
+           Status
+             stale (\"Snapshot from ...\"), live (live dot on a drive)
+           Live and cart markers
+             added (new since the last scan), removed (deleted since then),
+             cart (in the cleanup cart)
+           Changes tab
+             grew, shrank
+           Charts
+             chart-folder (folder fill), chart-hatch (folders of tiny files),
+             chart-hover, chart-hover-line, chart-select (selected outline),
+             chart-label (text on file tiles, or \"auto\" to pick dark or light
+             per tile), chart-label-folder
+           Title bar
+             close-hover, close-fg, logo-1, logo-2, logo-3, logo-4
+
+           Values can refer to other colours, like \"var(--danger)\" or
+           \"color-mix(in oklab, var(--accent) 70%, white)\". The default template
+           lists every key with its value.
 files      colours in the treemap, sunburst and Types tab: folder, other, none,
            video, image, audio, document, spreadsheet, presentation, archive,
            program, system, code, diskimage, database, design, font, email, log
 branches   sunburst colours for each top-level folder, in order (any number)
 
-Bulk writes its own templates (default, fern, tide, ember, graphite) only when
-they're missing, so edits to them are kept. Delete one to get the original back.
+Bulk keeps its own templates (default, fern, tide, ember, graphite) up to date,
+but never overwrites one you've edited. Delete one to get the original back. To
+make your own, copy a file and give it a new name.
 ";
 
 pub fn dir() -> PathBuf {
@@ -53,18 +80,54 @@ pub fn dir() -> PathBuf {
 }
 
 /// Write the shipped templates and the readme if they aren't there yet.
+/// FNV-1a, to tell whether a shipped template was edited since Bulk wrote it.
+fn fingerprint(bytes: &[u8]) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{h:016x}")
+}
+
+/// Write the shipped templates and the readme. A shipped template that's already
+/// there is only replaced by a newer version when nobody has edited it since Bulk
+/// wrote it; `.shipped.json` remembers what was written.
 fn seed(dir: &std::path::Path) {
     let _ = std::fs::create_dir_all(dir);
+    let ledger_path = dir.join(".shipped.json");
+    let mut ledger: std::collections::BTreeMap<String, String> = std::fs::read(&ledger_path)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let version = |bytes: &[u8]| {
+        serde_json::from_slice::<serde_json::Value>(bytes)
+            .ok()
+            .and_then(|v| v.get("version").and_then(|v| v.as_u64()))
+            .unwrap_or(1)
+    };
     for (id, json) in SHIPPED {
         let p = dir.join(format!("{id}.json"));
-        if !p.exists() {
-            let _ = std::fs::write(p, json);
+        let write = match std::fs::read(&p) {
+            Err(_) => true,
+            Ok(have) => {
+                let untouched = match ledger.get(*id) {
+                    Some(f) => *f == fingerprint(&have),
+                    // Written before the ledger existed: trust that it's ours.
+                    None => version(&have) == 1,
+                };
+                untouched && version(&have) < version(json.as_bytes())
+            }
+        };
+        if write && std::fs::write(&p, json).is_ok() {
+            ledger.insert(id.to_string(), fingerprint(json.as_bytes()));
         }
     }
-    let readme = dir.join("README.txt");
-    if !readme.exists() {
-        let _ = std::fs::write(readme, README);
+    if let Ok(b) = serde_json::to_vec_pretty(&ledger) {
+        let _ = std::fs::write(ledger_path, b);
     }
+    // The readme is Bulk's own documentation: always current.
+    let _ = std::fs::write(dir.join("README.txt"), README);
 }
 
 #[derive(Serialize)]
@@ -133,6 +196,11 @@ pub async fn templates() -> Templates {
                 .filter(|p| {
                     p.extension()
                         .is_some_and(|x| x.eq_ignore_ascii_case("json"))
+                })
+                // Dot-files are Bulk's own bookkeeping (`.shipped.json`).
+                .filter(|p| {
+                    !p.file_name()
+                        .is_some_and(|n| n.to_string_lossy().starts_with('.'))
                 })
                 .filter_map(|p| {
                     let id = p.file_stem()?.to_string_lossy().into_owned();

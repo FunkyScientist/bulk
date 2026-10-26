@@ -92,7 +92,7 @@
     {disabled}
     onclick={() => onchange(!on)}
   >
-    <span class="knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white" class:on></span>
+    <span class="knob absolute top-0.5 left-0.5 size-4 rounded-full bg-[var(--switch-knob)]" class:on></span>
   </button>
 {/snippet}
 
@@ -115,7 +115,7 @@
 
 {#if open}
   <div
-    class="fixed inset-0 z-40 bg-black/30"
+    class="fixed inset-0 z-40 bg-[var(--backdrop)]"
     transition:fade={{ duration: 140 }}
     onclick={() => (open = false)}
     role="presentation"

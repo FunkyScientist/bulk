@@ -316,16 +316,33 @@ To make your own, copy one of the files, rename it, edit the colours, and press
 }
 ```
 
-- **ui**: app colours (`app-bg`, `panel`, `fg`, `accent`, `line`, `danger`, …; the
-  full list is in the folder's `README.txt`).
+- **ui**: every colour in the app, each role on its own, so a red or yellow theme
+  never gets mixed up with warnings:
+
+  | Group | Keys |
+  |---|---|
+  | Window and text | `app-bg`, `app-tint`, `sidebar-tint`, `panel`, `panel-2`, `popover`, `hover`, `line`, `line-strong`, `fg`, `fg-muted`, `fg-subtle`, `shadow`, `backdrop` |
+  | Accent and controls | `accent`, `accent-fg`, `accent-soft`, `switch-off`, `switch-knob`, `bar-end` |
+  | Messages | `danger`, `danger-fg`, `ok`, `warn` |
+  | Drive usage | `usage`, `usage-low` (under 10% free), `usage-full` (under 5% free) |
+  | Status | `stale` (*Snapshot from …*), `live` |
+  | Markers | `added`, `removed` (live new/deleted), `cart` |
+  | Changes tab | `grew`, `shrank` |
+  | Charts | `chart-folder`, `chart-hatch`, `chart-hover`, `chart-hover-line`, `chart-select`, `chart-label` (or `auto`), `chart-label-folder` |
+  | Title bar | `close-hover`, `close-fg`, `logo-1` … `logo-4` |
+
+  Values can point at other colours: the default sets `usage-full` to
+  `var(--danger)`, so it follows whatever a template uses for danger unless the
+  template sets `usage-full` itself.
 - **files**: file-type colours in the treemap, sunburst and Types tab (`folder`,
   `video`, `image`, `document`, `spreadsheet`, `code`, …).
 - **branches**: the sunburst's colour for each top-level folder.
 
 Anything left out comes from the default, so a template can be a single accent
 colour. Values are any CSS colour. A file that isn't valid shows up in Settings with
-the reason. Bulk only writes its own five templates when they're missing, so your
-edits to them stick; delete one to get the original back.
+the reason. Bulk keeps its own five templates up to date but never overwrites one
+you've edited (it remembers what it wrote in `.shipped.json`); delete one to get the
+original back.
 
 ---
 

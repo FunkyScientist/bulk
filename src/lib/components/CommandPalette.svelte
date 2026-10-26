@@ -479,7 +479,7 @@
 
 {#if open}
   <div
-    class="fixed inset-0 z-40 bg-black/30"
+    class="fixed inset-0 z-40 bg-[var(--backdrop)]"
     transition:fade={{ duration: 140 }}
     onclick={() => (open = false)}
     role="presentation"
@@ -583,7 +583,7 @@
             >
           {/if}
           <button
-            class="pressable ml-auto flex h-6 items-center gap-1.5 rounded-md bg-accent px-2.5 text-[11.5px] font-medium text-white"
+            class="pressable ml-auto flex h-6 items-center gap-1.5 rounded-md bg-accent px-2.5 text-[11.5px] font-medium text-accent-fg"
             onclick={addPicked}
             ><ShoppingCart class="size-3.5" /> Add to cart
             <kbd class="opacity-70">Ctrl ↵</kbd></button

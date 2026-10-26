@@ -277,7 +277,7 @@
     border: 2px solid var(--app-bg);
   }
   .dot.ok {
-    background: var(--ok);
+    background: var(--live);
   }
   .scanbar {
     position: absolute;

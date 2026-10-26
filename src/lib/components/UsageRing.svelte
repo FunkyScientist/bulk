@@ -18,7 +18,7 @@
 
   // Fills turn amber then red as a drive gets full.
   const color = $derived(
-    value > 0.92 ? 'var(--danger)' : value > 0.8 ? 'var(--warn)' : 'var(--accent)',
+    value > 0.92 ? 'var(--usage-full)' : value > 0.8 ? 'var(--usage-low)' : 'var(--usage)',
   );
 </script>
 

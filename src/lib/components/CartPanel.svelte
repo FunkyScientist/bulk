@@ -43,7 +43,7 @@
 
 {#if app.cartOpen}
   <div
-    class="fixed inset-0 z-30 bg-black/25"
+    class="fixed inset-0 z-30 bg-[var(--backdrop)]"
     transition:fade={{ duration: 160 }}
     onclick={() => !busy && (app.cartOpen = false)}
     role="presentation"
@@ -146,7 +146,7 @@
 
 {#if confirming}
   <div
-    class="fixed inset-0 z-50 bg-black/40"
+    class="fixed inset-0 z-50 bg-[var(--backdrop)]"
     transition:fade={{ duration: 140 }}
     role="presentation"
     onclick={() => (confirming = false)}
@@ -183,7 +183,7 @@
         onclick={() => (confirming = false)}>Cancel</button
       >
       <button
-        class="pressable h-8 rounded-lg bg-danger px-3 text-[12.5px] font-medium text-white disabled:opacity-40"
+        class="pressable h-8 rounded-lg bg-danger px-3 text-[12.5px] font-medium text-danger-fg disabled:opacity-40"
         disabled={!understood}
         onclick={() => run(true)}>Delete permanently</button
       >

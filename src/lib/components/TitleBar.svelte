@@ -32,10 +32,10 @@
   <div class="pointer-events-none flex items-center gap-2 pl-4" data-tauri-drag-region>
     <svg viewBox="0 0 1024 1024" class="size-4" aria-hidden="true">
       <rect x="64" y="64" width="896" height="896" rx="208" fill="var(--panel-2)" />
-      <rect x="208" y="208" width="368" height="608" rx="56" fill="var(--accent)" />
-      <rect x="608" y="208" width="208" height="288" rx="48" fill="#3fd0c9" />
-      <rect x="608" y="528" width="208" height="128" rx="40" fill="#f5b544" />
-      <rect x="608" y="688" width="208" height="128" rx="32" fill="#ff6b8b" />
+      <rect x="208" y="208" width="368" height="608" rx="56" fill="var(--logo-1)" />
+      <rect x="608" y="208" width="208" height="288" rx="48" fill="var(--logo-2)" />
+      <rect x="608" y="528" width="208" height="128" rx="40" fill="var(--logo-3)" />
+      <rect x="608" y="688" width="208" height="128" rx="32" fill="var(--logo-4)" />
     </svg>
     <span class="text-[12.5px] font-medium tracking-tight text-fg-muted">Bulk</span>
   </div>
@@ -125,8 +125,8 @@
     color: var(--fg);
   }
   .winbtn.close:hover {
-    background: #c42b1c;
-    color: white;
+    background: var(--close-hover);
+    color: var(--close-fg);
   }
   .bump {
     animation: bump 420ms var(--ease-spring);

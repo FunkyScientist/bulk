@@ -331,14 +331,14 @@
               </span>
               {#if row.flags & Flags.GONE}
                 <span
-                  class="shrink-0 rounded px-1 text-[10.5px] font-medium text-danger"
-                  style="background: color-mix(in oklab, var(--danger) 12%, transparent)"
+                  class="shrink-0 rounded px-1 text-[10.5px] font-medium text-removed"
+                  style="background: color-mix(in oklab, var(--removed) 12%, transparent)"
                   >Deleted</span
                 >
               {:else if row.flags & Flags.NEW}
                 <span
-                  class="shrink-0 rounded px-1 text-[10.5px] font-medium text-ok"
-                  style="background: color-mix(in oklab, var(--ok) 14%, transparent)">New</span
+                  class="shrink-0 rounded px-1 text-[10.5px] font-medium text-added"
+                  style="background: color-mix(in oklab, var(--added) 14%, transparent)">New</span
                 >
               {/if}
             </div>
@@ -422,7 +422,7 @@
     background: linear-gradient(
       90deg,
       var(--accent),
-      color-mix(in oklab, var(--accent) 70%, white)
+      var(--bar-end)
     );
     transition: width 400ms var(--ease-out-soft);
   }

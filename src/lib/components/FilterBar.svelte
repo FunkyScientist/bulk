@@ -87,7 +87,7 @@
   {/if}
   {#if text.trim() !== (info?.query ?? '')}
     <button
-      class="pressable h-7 shrink-0 rounded-md bg-accent px-2.5 text-[12px] font-medium text-white"
+      class="pressable h-7 shrink-0 rounded-md bg-accent px-2.5 text-[12px] font-medium text-accent-fg"
       onclick={apply}>Apply</button
     >
   {/if}

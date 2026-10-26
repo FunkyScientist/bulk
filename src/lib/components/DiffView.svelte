@@ -202,8 +202,8 @@
       <div class="flex shrink-0 items-center gap-5 px-5 pt-4 pb-3">
         <div
           class="grid size-11 place-items-center rounded-xl {delta > 0
-            ? 'bg-[color-mix(in_oklab,var(--danger)_15%,transparent)] text-danger'
-            : 'bg-[color-mix(in_oklab,var(--ok)_15%,transparent)] text-ok'}"
+            ? 'bg-[color-mix(in_oklab,var(--grew)_15%,transparent)] text-grew'
+            : 'bg-[color-mix(in_oklab,var(--shrank)_15%,transparent)] text-shrank'}"
         >
           {#if delta > 0}<TrendingUp class="size-5" />{:else}<TrendingDown class="size-5" />{/if}
         </div>
@@ -301,8 +301,8 @@
             <span
               class="shrink-0 rounded px-1.5 py-px text-[10.5px] font-medium {item.status ===
               'added'
-                ? 'bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-danger'
-                : 'bg-[color-mix(in_oklab,var(--ok)_14%,transparent)] text-ok'}"
+                ? 'bg-[color-mix(in_oklab,var(--grew)_14%,transparent)] text-grew'
+                : 'bg-[color-mix(in_oklab,var(--shrank)_14%,transparent)] text-shrank'}"
               >{item.status === 'added' ? 'New' : 'Deleted'}</span
             >
           {/if}
@@ -310,17 +310,17 @@
             <span class="relative h-1.5 w-full overflow-hidden rounded-full bg-panel-2">
               <span
                 class="absolute inset-y-0 left-0 rounded-full {item.delta > 0
-                  ? 'bg-danger'
-                  : 'bg-ok'}"
+                  ? 'bg-grew'
+                  : 'bg-shrank'}"
                 style="width: {(Math.abs(item.delta) / max) * 100}%"
               ></span>
             </span>
           </span>
           <span
             class="tabular w-[92px] shrink-0 text-right font-medium {item.delta > 0
-              ? 'text-danger'
+              ? 'text-grew'
               : item.delta < 0
-                ? 'text-ok'
+                ? 'text-shrank'
                 : 'text-fg-subtle'}">{signed(item.delta)}</span
           >
           <span

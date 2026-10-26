@@ -44,7 +44,7 @@
 
 {#if open}
   <div
-    class="fixed inset-0 z-40 bg-black/30"
+    class="fixed inset-0 z-40 bg-[var(--backdrop)]"
     transition:fade={{ duration: 140 }}
     onclick={() => (open = false)}
     role="presentation"

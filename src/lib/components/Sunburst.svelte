@@ -169,7 +169,9 @@
     const theme = app.resolvedTheme;
     const dark = theme === 'dark';
     const accent = css('--accent');
-    const danger = css('--danger');
+    const cart = css('--cart');
+    const labelInk = css('--chart-label');
+    const labelInkFolder = css('--chart-label-folder');
     const t = arcs;
     const sel = app.selected;
 
@@ -222,19 +224,19 @@
       ctx.closePath();
       ctx.fill();
       if (f & TileFlags.IN_CART) {
-        ctx.fillStyle = cartStripes(ctx, danger);
+        ctx.fillStyle = cartStripes(ctx, cart);
         ctx.globalAlpha = alpha * (dark ? 0.32 : 0.28);
         ctx.fill();
       }
       if (f & TileFlags.NEW) {
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = css('--ok');
+        ctx.strokeStyle = css('--added');
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
       if (f & TileFlags.CART_ROOT) {
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = danger;
+        ctx.strokeStyle = cart;
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 3]);
         ctx.stroke();
@@ -244,7 +246,7 @@
       if (!z && (i === hover || t.id[i] === sel)) {
         ctx.globalAlpha = 1;
         ctx.lineWidth = i === hover ? 1.5 : 2;
-        ctx.strokeStyle = dark ? '#fff' : '#17171d';
+        ctx.strokeStyle = css('--chart-select');
         if (t.id[i] === sel) {
           ctx.shadowColor = accent;
           ctx.shadowBlur = 10;
@@ -252,7 +254,7 @@
         ctx.stroke();
         ctx.shadowBlur = 0;
         if (i === hover) {
-          ctx.fillStyle = dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.3)';
+          ctx.fillStyle = css('--chart-hover');
           ctx.fill();
         }
       }
@@ -275,13 +277,12 @@
         const text = ellipsize(label, len * 0.82, 6.1);
         if (!text) continue;
         const f = t.flags[i];
-        ctx.fillStyle = dark
-          ? f & TileFlags.DIR
-            ? '#fff'
-            : 'rgba(10,10,16,0.85)'
-          : f & TileFlags.DIR || f & TileFlags.IN_CART
-            ? 'rgba(16,16,24,0.88)'
-            : inkOn(categoryColor(t.cat[i]));
+        ctx.fillStyle =
+          f & TileFlags.DIR || (!dark && f & TileFlags.IN_CART)
+            ? labelInkFolder
+            : labelInk === 'auto'
+              ? inkOn(categoryColor(t.cat[i]))
+              : labelInk;
         // Run the text along the arc, flipped on the lower half so it's never upside down.
         const am = mid - Math.PI / 2;
         const flip = mid > Math.PI / 2 && mid < (Math.PI * 3) / 2;
@@ -496,13 +497,13 @@
         {#if total > 0}<span class="text-fg-subtle"> · {percent(tip.value / total)}</span>{/if}
       </div>
       {#if tip.gone}
-        <div class="mt-0.5 text-[11.5px] text-danger">Deleted</div>
+        <div class="mt-0.5 text-[11.5px] text-removed">Deleted</div>
       {:else if tip.cart}
-        <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-danger">
+        <div class="mt-0.5 flex items-center gap-1 text-[11.5px] text-cart">
           <Trash2 class="size-3" /> In cleanup cart
         </div>
       {:else if tip.added}
-        <div class="mt-0.5 text-[11.5px] text-ok">New since the last scan</div>
+        <div class="mt-0.5 text-[11.5px] text-added">New since the last scan</div>
       {/if}
     </div>
   {/if}
