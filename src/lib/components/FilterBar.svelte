@@ -13,9 +13,15 @@
   let text = $state('');
   let input: HTMLInputElement | undefined = $state();
 
-  // Show the applied query whenever it changes (from Types, the palette, or here).
+  // Show the applied query when it changes (from Types, the palette, or here). Live
+  // updates refresh `info` constantly; they mustn't overwrite what's being typed.
+  let synced: string | null = null;
   $effect(() => {
-    text = info?.query ?? '';
+    const q = info?.query ?? '';
+    if (q !== synced) {
+      synced = q;
+      text = q;
+    }
   });
 
   $effect(() => {
