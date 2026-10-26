@@ -30,5 +30,8 @@ opt-level = 3
 opt-level = 2
 
 # The scanner is far too slow unoptimized, even while developing the UI.
+# Incremental builds of it at opt-level 3 sometimes leave stale symbols that fail
+# to link ("unresolved external symbol anon.…llvm…"), so build it whole.
 [profile.dev.package.bulk-core]
 opt-level = 3
+incremental = false
