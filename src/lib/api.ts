@@ -19,6 +19,7 @@ export interface Drive {
   scannedAt: number | null;
   method: 'mft' | 'walk' | null;
   live: boolean;
+  needsRescan: boolean;
   files: number;
   alloc: number;
 }

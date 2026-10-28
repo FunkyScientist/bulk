@@ -24,6 +24,8 @@ pub struct DriveSummary {
     vol: Volume,
     /// Kept current from the change journal.
     live: bool,
+    /// The journal couldn't catch the snapshot up; the UI rescans it.
+    needs_rescan: bool,
     auto_scan: bool,
     scanning: bool,
     scanned: bool,
@@ -49,6 +51,7 @@ pub fn drives(app: AppHandle, state: State<AppState>) -> Vec<DriveSummary> {
                 scanned_at: d.scanned_at,
                 method: d.method,
                 live: d.watch.is_some(),
+                needs_rescan: d.needs_rescan,
                 files: root.map_or(0, |r| r.files),
                 alloc: root.map_or(0, |r| r.alloc),
             }

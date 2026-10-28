@@ -96,11 +96,7 @@ pub fn start(app: &AppHandle, letter: char) {
         // Catch up in one go first so the UI gets a single big refresh.
         match client.changes(letter, journal.id, journal.next) {
             Ok(CatchUp::Changes(changes, next)) => apply(&app, letter, &changes, next),
-            Ok(CatchUp::Gap) => {
-                clear(&app, letter, &stop);
-                let _ = app.emit("needs-rescan", letter);
-                return;
-            }
+            Ok(CatchUp::Gap) => return gap(&app, letter, &stop),
             Err(_) => return clear(&app, letter, &stop),
         }
         let _ = app.emit("drive-live", letter);
@@ -128,11 +124,7 @@ pub fn start(app: &AppHandle, letter: char) {
                 !stop.load(Ordering::Relaxed)
             });
             match r {
-                Ok(CatchUp::Gap) => {
-                    clear(&app, letter, &stop);
-                    let _ = app.emit("needs-rescan", letter);
-                    return;
-                }
+                Ok(CatchUp::Gap) => return gap(&app, letter, &stop),
                 Ok(_) => {}
                 // Helper restarted or went idle: give it a moment and reconnect.
                 Err(_) => {
@@ -157,6 +149,15 @@ fn clear(app: &AppHandle, letter: char, stop: &Arc<AtomicBool>) {
     }
     drop(drives);
     let _ = app.emit("drive-updated", letter);
+}
+
+/// The journal can't cover the gap. Flag the drive rather than only sending an event:
+/// at startup this happens before the window is listening.
+fn gap(app: &AppHandle, letter: char, stop: &Arc<AtomicBool>) {
+    if let Some(d) = app.state::<AppState>().drives.lock().unwrap().get_mut(&letter) {
+        d.needs_rescan = true;
+    }
+    clear(app, letter, stop);
 }
 
 fn set_next(app: &AppHandle, letter: char, next: i64) {

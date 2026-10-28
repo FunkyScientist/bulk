@@ -123,8 +123,6 @@ class AppState {
     await listen<HelperStatus>('helper-status', (e) => (this.helper = e.payload));
     await listen<string>('drive-updated', (e) => this.driveChanged(e.payload));
     await listen<string>('drive-live', (e) => this.driveChanged(e.payload));
-    // The change journal couldn't cover the gap since the last snapshot.
-    await listen<string>('needs-rescan', (e) => void this.scan(e.payload));
     await listen('cart-changed', async () => (this.cart = await api.cartGet()));
     // "Analyze with Bulk" from Explorer while we're already open.
     await listen<string>('open-path', (e) => void this.openPath(e.payload));
@@ -153,8 +151,7 @@ class AppState {
       const letters = [...this.pendingChanged];
       this.pendingChanged.clear();
       await this.refreshDrives();
-      for (const l of letters)
-        if (this.filters[l]) this.filters[l] = await api.getFilter(l);
+      for (const l of letters) if (this.filters[l]) this.filters[l] = await api.getFilter(l);
       if (this.current && letters.includes(this.current) && !this.isScanning(this.current))
         this.rowsVersion++;
     }, 600);
@@ -178,6 +175,9 @@ class AppState {
 
   async refreshDrives() {
     this.drives = await api.drives();
+    // The change journal couldn't cover the gap since the last snapshot.
+    for (const d of this.drives)
+      if (d.needsRescan && !this.isScanning(d.letter)) void this.scan(d.letter);
   }
 
   select(letter: string) {

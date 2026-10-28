@@ -34,6 +34,8 @@ pub struct Drive {
     pub dirty: bool,
     /// Set while a watcher keeps this tree live; store `true` to stop it.
     pub watch: Option<Arc<AtomicBool>>,
+    /// The journal no longer reaches back to the tree; only a rescan brings it up to date.
+    pub needs_rescan: bool,
     /// Older snapshot loaded for the "what changed" view.
     pub diff: Option<(Meta, Tree)>,
     /// The Browse filter applied to `diff`'s snapshot.
@@ -53,6 +55,7 @@ impl Drive {
             index: None,
             dirty: false,
             watch: None,
+            needs_rescan: false,
             diff: None,
             diff_filter: None,
         }

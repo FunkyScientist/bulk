@@ -207,6 +207,7 @@ pub fn start(app: AppHandle, letter: char, channel: Channel<ScanEvent>) -> Resul
             return Err("already scanning".into());
         }
         d.stop_watch();
+        d.needs_rescan = false;
         let p = Arc::new(Progress::default());
         d.scan = Some(p.clone());
         (d.vol.clone(), p)
