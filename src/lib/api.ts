@@ -336,6 +336,32 @@ export type DupesEvent =
   | { type: 'done'; groups: DupeGroup[]; elapsedMs: number; candidates: number }
   | { type: 'cancelled' };
 
+export type Safety = 'safe' | 'review' | 'info';
+
+export interface CleanupItem {
+  id: number;
+  path: string;
+  alloc: number;
+  mtime: number;
+}
+
+export interface Finding {
+  key: string;
+  label: string;
+  safety: Safety;
+  why: string;
+  alloc: number;
+  items: CleanupItem[];
+}
+
+export interface CleanupResult {
+  scope: string;
+  safe: number;
+  review: number;
+  findings: Finding[];
+  hidden: string[];
+}
+
 export interface Settings {
   fastMode: boolean;
   helperDeclined: boolean;
@@ -344,6 +370,7 @@ export interface Settings {
   historyKeep: number;
   explorerMenu: boolean;
   template: string;
+  cleanupIgnore: string[];
 }
 
 export const api = {
@@ -380,6 +407,12 @@ export const api = {
   getFilter: (letter: string) => invoke<FilterInfo | null>('get_filter', { letter }),
   searchIds: (query: string, scope: SearchScope) =>
     invoke<{ letter: string; ids: number[] }[]>('search_ids', { query, scope }),
+  cleanup: (letter: string, folder: number | null) =>
+    invoke<CleanupResult>('cleanup', { letter, folder }),
+  cleanupIgnore: (entry: string, ignore: boolean) =>
+    invoke<string[]>('cleanup_ignore', { entry, ignore }),
+  emptyRecycleBin: () => invoke<void>('empty_recycle_bin'),
+  diskCleanup: () => invoke<void>('disk_cleanup'),
   types: (letter: string, folder: number | null) =>
     invoke<TypesResult>('types', { letter, folder }),
   history: (letter: string) => invoke<HistoryEntry[]>('history', { letter }),

@@ -4,6 +4,7 @@ import type { Component } from 'svelte';
 import {
   api,
   type CartItem,
+  type CleanupResult,
   type DeleteResult,
   type DupeGroup,
   type FilterInfo,
@@ -98,7 +99,9 @@ class AppState {
   /** Files beside the chart (columns) or above it (rows). */
   layout = $state<Layout>(readPref<Layout>('bulk.layout', 'columns'));
   split = $state(Number(readPref('bulk.split', '0.5')) || 0.5);
-  tab = $state<'browse' | 'changes' | 'duplicates' | 'types'>('browse');
+  tab = $state<'browse' | 'changes' | 'duplicates' | 'types' | 'cleanup'>('browse');
+  /** Whole-drive cleanup suggestions, for the header's "to clean up" figure. */
+  cleanup = $state<Record<string, CleanupResult>>({});
   cart = $state<CartItem[]>([]);
   cartOpen = $state(false);
   /** Bumped when something is added, so the cart button can bounce. */
@@ -155,8 +158,10 @@ class AppState {
       this.pendingChanged.clear();
       await this.refreshDrives();
       for (const l of letters) if (this.filters[l]) this.filters[l] = await api.getFilter(l);
-      if (this.current && letters.includes(this.current) && !this.isScanning(this.current))
+      if (this.current && letters.includes(this.current) && !this.isScanning(this.current)) {
         this.rowsVersion++;
+        void this.loadCleanup(this.current, 30_000);
+      }
     }, 600);
   }
 
@@ -174,6 +179,17 @@ class AppState {
         ? this.drives.filter((d) => d.autoScan && !d.scanned)
         : this.drives.filter((d) => d.letter === this.current && !d.scanned);
     for (const d of targets) await this.scan(d.letter);
+  }
+
+  private cleanupAt: Record<string, number> = {};
+
+  /** Refresh a drive's whole-drive cleanup suggestions, at most every `minMs`. */
+  async loadCleanup(letter: string, minMs = 0) {
+    const now = Date.now();
+    if (now - (this.cleanupAt[letter] ?? 0) < minMs) return;
+    this.cleanupAt[letter] = now;
+    const r = await api.cleanup(letter, null).catch(() => null);
+    if (r) this.cleanup[letter] = r;
   }
 
   async refreshDrives() {
@@ -256,8 +272,8 @@ class AppState {
       const info = await api.setFilter(letter, query);
       this.filters[letter] = info;
       this.filterOpen = info !== null;
-      // Types has nothing to filter; show the result in Browse.
-      if (info && this.tab === 'types') this.tab = 'browse';
+      // Types and Cleanup have nothing to filter; show the result in Browse.
+      if (info && (this.tab === 'types' || this.tab === 'cleanup')) this.tab = 'browse';
       this.rowsVersion++;
     } catch (e) {
       this.toast(`Couldn't filter: ${e}`, { tone: 'error' });

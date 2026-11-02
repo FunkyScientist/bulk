@@ -35,8 +35,9 @@ pub async fn settings_set(app: AppHandle, settings: Settings) -> Result<Settings
     let mut s = settings;
     s.history_keep = s.history_keep.clamp(1, 365);
     let old = get(&app);
-    // Only the backend tracks this.
+    // Only the backend tracks these (Cleanup changes its own list).
     s.helper_declined = old.helper_declined;
+    s.cleanup_ignore = old.cleanup_ignore.clone();
 
     // The snapshot task exists only while automatic snapshots are on. The helper
     // creates it, since it's already elevated.

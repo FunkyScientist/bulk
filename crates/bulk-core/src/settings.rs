@@ -40,6 +40,8 @@ pub struct Settings {
     pub explorer_menu: bool,
     /// Colour template: a file name (without `.json`) in the templates folder.
     pub template: String,
+    /// Cleanup suggestions not to show: a kind (`node_modules`) or a full path.
+    pub cleanup_ignore: Vec<String>,
 }
 
 impl Default for Settings {
@@ -52,6 +54,7 @@ impl Default for Settings {
             history_keep: 7,
             explorer_menu: true,
             template: "default".into(),
+            cleanup_ignore: Vec::new(),
         }
     }
 }

@@ -1,4 +1,5 @@
 mod cart;
+mod cleanup;
 mod commands;
 mod dupes;
 mod history;
@@ -60,6 +61,10 @@ pub fn run() {
             commands::get_filter,
             commands::search_ids,
             commands::types,
+            cleanup::cleanup,
+            cleanup::cleanup_ignore,
+            cleanup::empty_recycle_bin,
+            cleanup::disk_cleanup,
             commands::show_in_explorer,
             commands::open_path,
             commands::export,

@@ -309,6 +309,31 @@ pub fn scan(tree: &Tree, root: NodeId, now: u64) -> Vec<Finding> {
     out
 }
 
+/// Leave out what the user said not to suggest: whole kinds (by key) or single
+/// paths (anything with a `\`), and anything inside an ignored path.
+pub fn without(findings: Vec<Finding>, ignore: &[String]) -> Vec<Finding> {
+    let paths: Vec<String> = ignore
+        .iter()
+        .filter(|i| i.contains('\\'))
+        .map(|p| p.trim_end_matches('\\').to_ascii_lowercase())
+        .collect();
+    let hidden = |p: &str| {
+        let p = p.to_ascii_lowercase();
+        paths
+            .iter()
+            .any(|i| p == *i || p.starts_with(&format!("{i}\\")))
+    };
+    findings
+        .into_iter()
+        .filter(|f| !ignore.iter().any(|i| i == f.key))
+        .filter_map(|mut f| {
+            f.items.retain(|it| !hidden(&it.path));
+            f.alloc = f.items.iter().map(|it| it.alloc).sum();
+            (!f.items.is_empty()).then_some(f)
+        })
+        .collect()
+}
+
 fn gone(tree: &Tree, id: NodeId) -> bool {
     tree.get(id).has(flags::GONE | flags::DELETED)
 }
@@ -321,15 +346,18 @@ fn under(tree: &Tree, id: NodeId, name: &[u8]) -> bool {
     tree.ancestors(id).any(|a| tree.name_lower(a) == name)
 }
 
-/// Folders whose contents belong to installed programs or Windows.
+/// Folders whose contents belong to installed programs or Windows: system
+/// folders, AppData, and tools' dot-folders in a profile (`~\.vscode`, `~\.cache`).
 fn app_area_name(tree: &Tree, parent: NodeId, id: NodeId) -> bool {
     let name = tree.name_lower(id);
+    let in_profile = parent != tree.root && tree.name_lower(tree.get(parent).parent) == b"users";
     (parent == tree.root
         && matches!(
             name,
             b"windows" | b"program files" | b"program files (x86)" | b"programdata"
         ))
         || name == b"appdata"
+        || (in_profile && name.starts_with(b"."))
 }
 
 fn in_app_area(tree: &Tree, id: NodeId) -> bool {
@@ -375,6 +403,12 @@ mod tests {
         let not_rust = t.add(other, "target", flags::DIR, 0, 0, 0, 0);
         t.add(not_rust, "z.txt", 0, 10, 4096, old, 0);
         t.add(t.root, "crash.dmp", 0, 10, 4096, old, 0);
+        // A tool's own packages in a profile's dot-folder.
+        let users = t.add(t.root, "Users", flags::DIR, 0, 0, 0, 0);
+        let me = t.add(users, "me", flags::DIR, 0, 0, 0, 0);
+        let dot = t.add(me, ".vscode", flags::DIR, 0, 0, 0, 0);
+        let ext = t.add(dot, "node_modules", flags::DIR, 0, 0, 0, 0);
+        t.add(ext, "w.js", 0, 10, 4096, old, 0);
         t.aggregate();
 
         let f = scan(&t, t.root, now);
@@ -394,5 +428,15 @@ mod tests {
         // Scoped to a folder, only what's inside it.
         let f = scan(&t, other, now);
         assert!(f.is_empty(), "{f:?}");
+
+        // Hidden kinds and paths stay out; a path hides what's inside it too.
+        let all = scan(&t, t.root, now);
+        let f = without(all.clone(), &["crash-dumps".into(), "q:\\PROJ".into()]);
+        assert!(f.iter().all(|x| x.key != "crash-dumps"));
+        assert!(
+            f.iter()
+                .all(|x| x.key != "rust-target" && x.key != "node_modules")
+        );
+        assert_eq!(without(all.clone(), &[]).len(), all.len());
     }
 }

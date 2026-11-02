@@ -16,6 +16,8 @@
   import CopyIcon from '@lucide/svelte/icons/copy';
   import DupesView from './DupesView.svelte';
   import TypesView from './TypesView.svelte';
+  import CleanupView from './CleanupView.svelte';
+  import Sparkles from '@lucide/svelte/icons/sparkles';
   import FilterBar from './FilterBar.svelte';
   import Funnel from '@lucide/svelte/icons/funnel';
   import Shapes from '@lucide/svelte/icons/shapes';
@@ -75,7 +77,15 @@
     { k: 'changes', l: 'Changes', I: History },
     { k: 'duplicates', l: 'Duplicates', I: CopyIcon },
     { k: 'types', l: 'Types', I: Shapes },
+    { k: 'cleanup', l: 'Cleanup', I: Sparkles },
   ] as const;
+
+  // The header's "to clean up" figure; refreshed as the drive changes.
+  $effect(() => {
+    const letter = drive.letter;
+    if (drive.scanned) void app.loadCleanup(letter, 30_000);
+  });
+  const reclaim = $derived(app.cleanup[drive.letter]?.safe ?? 0);
 
   let body: HTMLDivElement | undefined = $state();
   const rows = $derived(app.layout === 'rows');
@@ -99,7 +109,7 @@
   }
 </script>
 
-<div class="flex h-full flex-col" in:fade={{ duration: 160 }}>
+<div class="@container flex h-full flex-col" in:fade={{ duration: 160 }}>
   <div class="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
     <div class="min-w-0">
       <div class="flex items-baseline gap-2">
@@ -118,29 +128,38 @@
           title="Scans walk folders one by one and the drive isn't kept up to date. Turn fast mode on in Settings."
           ><ZapOff class="inline size-3 -translate-y-px" /> Fast mode off</span
         >{/if}
+      {#if reclaim >= 100 * 1024 * 1024}<span class="mx-1">·</span><button
+          class="hover:text-fg hover:underline"
+          title="Space that's usually safe to get back: caches, build output, old temp files"
+          onclick={() => (app.tab = 'cleanup')}>{bytes(reclaim)} to clean up</button
+        >{/if}
       {#if !drive.live && drive.scannedAt}<span class="mx-1">·</span><span
           class="text-stale"
           title="Not being kept up to date: this is the last scan. Rescan to refresh."
-          ><History class="inline size-3 -translate-y-px" /> Snapshot from {ago(drive.scannedAt)}</span
+          ><History class="inline size-3 -translate-y-px" /> Snapshot from {ago(
+            drive.scannedAt,
+          )}</span
         >{/if}
     </div>
 
     <div class="ml-auto flex items-center gap-2">
       <div class="tabs relative flex rounded-lg bg-panel-2 p-0.5 text-[12px]">
         <span
-          class="thumb"
+          class="thumb w-8 @min-[1180px]:w-[92px]"
           style="transform: translateX({tabs.findIndex((t) => t.k === app.tab) * 100}%)"
         ></span>
         {#each tabs as t (t.k)}
           <button
-            class="relative z-10 flex h-6 w-[92px] items-center justify-center gap-1.5 rounded-md transition-colors {app.tab ===
+            class="relative z-10 flex h-6 w-8 items-center justify-center gap-1.5 rounded-md transition-colors @min-[1180px]:w-[92px] {app.tab ===
             t.k
               ? 'text-fg'
               : 'text-fg-subtle hover:text-fg-muted'}"
             aria-pressed={app.tab === t.k}
+            aria-label={t.l}
+            title={t.l}
             onclick={() => (app.tab = t.k)}
           >
-            <t.I class="size-3.5" />{t.l}
+            <t.I class="size-3.5" /><span class="hidden @min-[1180px]:inline">{t.l}</span>
           </button>
         {/each}
       </div>
@@ -173,7 +192,7 @@
         title="Show only matching files in Browse, Changes and Duplicates (Ctrl Shift F)"
         aria-pressed={filterShown}
         onclick={() => {
-          if (app.tab === 'types') app.tab = 'browse';
+          if (app.tab === 'types' || app.tab === 'cleanup') app.tab = 'browse';
           else if (filterShown && !filtered) app.filterOpen = false;
           else {
             app.filterOpen = true;
@@ -194,8 +213,8 @@
             ? canExport(drive.letter)
               ? 'Export these duplicates'
               : 'Find duplicates first'
-            : app.tab === 'types'
-              ? 'Nothing to export from Types'
+            : app.tab === 'types' || app.tab === 'cleanup'
+              ? 'Nothing to export here'
               : 'Export the folder shown in the chart'}
         onclick={(e) => exportMenu(e, drive.letter)}
       >
@@ -227,10 +246,14 @@
     </div>
   </div>
 
-  {#if filterShown && app.tab !== 'types'}
+  {#if filterShown && app.tab !== 'types' && app.tab !== 'cleanup'}
     <FilterBar letter={drive.letter} total={drive.alloc} />
   {/if}
-  {#if app.tab === 'types'}
+  {#if app.tab === 'cleanup'}
+    <div class="min-h-0 flex-1">
+      <CleanupView letter={drive.letter} />
+    </div>
+  {:else if app.tab === 'types'}
     <div class="min-h-0 flex-1">
       <TypesView letter={drive.letter} />
     </div>
@@ -272,7 +295,6 @@
     position: absolute;
     top: 2px;
     left: 2px;
-    width: 92px;
     height: 24px;
     border-radius: 6px;
     background: var(--panel);
