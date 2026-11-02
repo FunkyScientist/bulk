@@ -206,13 +206,9 @@ pub fn pipe_name(sid: &str) -> String {
     format!(r"\\.\pipe\bulk-helper-{sid}{suffix}")
 }
 
-/// Path of `bulk-helper.exe`, expected next to the running executable.
+/// Path of `bulk-helper.exe`, in the folder Bulk is installed in.
 pub fn helper_exe() -> PathBuf {
-    let dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(Path::to_path_buf))
-        .unwrap_or_default();
-    dir.join("bulk-helper.exe")
+    crate::os::install_dir().join("bulk-helper.exe")
 }
 
 pub struct Client {

@@ -3,7 +3,7 @@
 
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use bulk_core::helper::{self, Client, Event, ProgressInfo};
 use bulk_core::scan::{Progress, walk};
@@ -393,8 +393,4 @@ fn scan_via_walk(
     Ok((r?, None))
 }
 
-pub fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
-}
+pub use bulk_core::os::now;

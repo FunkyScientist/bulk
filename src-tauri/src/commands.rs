@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::os::windows::process::CommandExt;
 
 use bulk_core::tree::{NodeId, SortKey, Tree};
 use bulk_core::volume::{DriveKind, Volume};
@@ -554,7 +553,6 @@ fn run_search(
     scope: SearchScope,
     limit: usize,
 ) -> (Vec<(u8, SearchHit)>, usize) {
-    use bulk_core::search::Sort;
     let q = bulk_core::search::parse(query, scan::now());
     let drives = state.drives.lock().unwrap();
     let mut all: Vec<(u8, SearchHit)> = Vec::new();
@@ -587,15 +585,16 @@ fn run_search(
         }
     }
     // Each drive's hits are already in order; this merges the drives.
-    all.sort_by(|(sa, a), (sb, b)| match q.sort {
-        Sort::Relevance => sb.cmp(sa).then(b.alloc.cmp(&a.alloc)),
-        Sort::Size => b.alloc.cmp(&a.alloc),
-        Sort::Small => a.alloc.cmp(&b.alloc),
-        Sort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-        Sort::Newest => b.mtime.cmp(&a.mtime),
-        Sort::Oldest => a.mtime.cmp(&b.mtime),
-        Sort::Files => b.files.cmp(&a.files),
-    });
+    fn rank((score, h): &(u8, SearchHit)) -> bulk_core::search::Rank<'_> {
+        bulk_core::search::Rank {
+            score: *score,
+            alloc: h.alloc,
+            mtime: h.mtime,
+            files: h.files,
+            name: &h.name,
+        }
+    }
+    all.sort_by(|a, b| bulk_core::search::compare(q.sort, &rank(a), &rank(b)));
     all.truncate(limit);
     (all, total)
 }
@@ -754,35 +753,12 @@ pub async fn export(
 /// Open a file with its default app.
 #[tauri::command]
 pub fn open_path(path: String) -> Res<()> {
-    use windows_sys::Win32::UI::Shell::ShellExecuteW;
-    let to_w = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
-    let (verb, file) = (to_w("open"), to_w(&path));
-    let r = unsafe {
-        ShellExecuteW(
-            std::ptr::null_mut(),
-            verb.as_ptr(),
-            file.as_ptr(),
-            std::ptr::null(),
-            std::ptr::null(),
-            1, // SW_SHOWNORMAL
-        )
-    };
-    // Values above 32 mean success.
-    if r as usize <= 32 {
-        return Err(format!("couldn't open {path}"));
-    }
-    Ok(())
+    bulk_core::os::open(&path).map_err(err)
 }
 
 #[tauri::command]
 pub fn show_in_explorer(path: String) -> Res<()> {
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    std::process::Command::new("explorer.exe")
-        .raw_arg(format!("/select,\"{}\"", path.replace('"', "")))
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
-        .map_err(err)?;
-    Ok(())
+    bulk_core::os::reveal(&path).map_err(err)
 }
 
 #[tauri::command]

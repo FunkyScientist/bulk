@@ -553,6 +553,28 @@ pub fn matching(tree: &Tree, q: &Query) -> Vec<NodeId> {
         .collect()
 }
 
+/// What hits from several trees are merged by (see `compare`).
+pub struct Rank<'a> {
+    pub score: u8,
+    pub alloc: u64,
+    pub mtime: u32,
+    pub files: u32,
+    pub name: &'a str,
+}
+
+/// Order for hits from different drives, matching the order within one.
+pub fn compare(sort: Sort, a: &Rank, b: &Rank) -> std::cmp::Ordering {
+    match sort {
+        Sort::Relevance => b.score.cmp(&a.score).then(b.alloc.cmp(&a.alloc)),
+        Sort::Size => b.alloc.cmp(&a.alloc),
+        Sort::Small => a.alloc.cmp(&b.alloc),
+        Sort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        Sort::Newest => b.mtime.cmp(&a.mtime),
+        Sort::Oldest => a.mtime.cmp(&b.mtime),
+        Sort::Files => b.files.cmp(&a.files),
+    }
+}
+
 fn rank(tree: &Tree, sort: Sort, hits: &mut [Hit]) {
     let size = |h: &Hit| tree.get(h.id).alloc;
     let mtime = |h: &Hit| tree.get(h.id).mtime;

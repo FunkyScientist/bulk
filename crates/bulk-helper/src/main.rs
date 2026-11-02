@@ -13,9 +13,9 @@ use std::os::windows::io::FromRawHandle;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
@@ -27,8 +27,7 @@ use bulk_core::scan::{self, Progress};
 use bulk_core::{snapshot, usn};
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE, LocalFree,
-    WAIT_OBJECT_0,
+    CloseHandle, ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE, LocalFree, WAIT_OBJECT_0,
 };
 use windows_sys::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -470,11 +469,17 @@ fn client_allowed(pipe: isize) -> Option<u32> {
     }
     let client = PathBuf::from(String::from_utf16_lossy(&buf[..len as usize]));
     let me = std::env::current_exe().ok()?;
-    let same_dir = match (client.parent(), me.parent()) {
-        (Some(a), Some(b)) => a.as_os_str().eq_ignore_ascii_case(b.as_os_str()),
+    // Beside the helper, or the CLI in the install's `bin` folder. Both are in
+    // Program Files, where only admins can put executables.
+    let allowed = match (client.parent(), me.parent()) {
+        (Some(a), Some(b)) => {
+            a.as_os_str().eq_ignore_ascii_case(b.as_os_str())
+                || a.as_os_str()
+                    .eq_ignore_ascii_case(b.join("bin").as_os_str())
+        }
         _ => false,
     };
-    (same_dir && client != me).then_some(pid)
+    (allowed && client != me).then_some(pid)
 }
 
 fn handle(mut conn: File, raw: isize, sid: &str, activity: &Activity) -> anyhow::Result<()> {

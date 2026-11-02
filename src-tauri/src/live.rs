@@ -154,7 +154,13 @@ fn clear(app: &AppHandle, letter: char, stop: &Arc<AtomicBool>) {
 /// The journal can't cover the gap. Flag the drive rather than only sending an event:
 /// at startup this happens before the window is listening.
 fn gap(app: &AppHandle, letter: char, stop: &Arc<AtomicBool>) {
-    if let Some(d) = app.state::<AppState>().drives.lock().unwrap().get_mut(&letter) {
+    if let Some(d) = app
+        .state::<AppState>()
+        .drives
+        .lock()
+        .unwrap()
+        .get_mut(&letter)
+    {
         d.needs_rescan = true;
     }
     clear(app, letter, stop);

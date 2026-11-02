@@ -151,6 +151,92 @@ pub fn restore(item: &Recycled) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Why `path` mustn't be deleted from the command line, if it mustn't: Windows
+/// itself, installed programs, a drive or a profile's top-level folders, and
+/// Bulk's own data. `path` should be absolute.
+pub fn protected(path: &Path) -> Option<&'static str> {
+    let lower = |p: &Path| {
+        p.to_string_lossy()
+            .trim_end_matches('\\')
+            .to_ascii_lowercase()
+            .replace('/', "\\")
+    };
+    let p = lower(path);
+    let is_or_in = |dir: &str| p == dir || p.starts_with(&format!("{dir}\\"));
+    let env = |k: &str| std::env::var_os(k).map(|v| lower(Path::new(&v)));
+
+    if p.len() <= 2 {
+        return Some("a whole drive");
+    }
+    for (var, why) in [
+        ("SystemRoot", "part of Windows"),
+        ("ProgramFiles", "an installed program"),
+        ("ProgramFiles(x86)", "an installed program"),
+        ("ProgramW6432", "an installed program"),
+        ("ProgramData", "shared program data"),
+    ] {
+        if env(var).is_some_and(|d| is_or_in(&d)) {
+            return Some(why);
+        }
+    }
+    let local = env("LOCALAPPDATA");
+    if local
+        .as_ref()
+        .is_some_and(|l| is_or_in(&format!("{l}\\bulk")))
+    {
+        return Some("Bulk's own data");
+    }
+    if is_or_in(&lower(&crate::os::install_dir())) {
+        return Some("part of Bulk");
+    }
+
+    // Folders that hold everything else: the folder itself is protected, what's in
+    // it isn't.
+    let name = p.rsplit('\\').next().unwrap_or("");
+    let parent = p.rsplit_once('\\').map_or("", |(a, _)| a);
+    if parent.len() <= 2
+        && (name.starts_with('$')
+            || matches!(
+                name,
+                "users"
+                    | "system volume information"
+                    | "recovery"
+                    | "boot"
+                    | "pagefile.sys"
+                    | "hiberfil.sys"
+                    | "swapfile.sys"
+                    | "bootmgr"
+            ))
+    {
+        return Some("needed by Windows");
+    }
+    if let Some(profile) = env("USERPROFILE") {
+        let users = profile.rsplit_once('\\').map_or("", |(a, _)| a);
+        if parent == users {
+            return Some("a user's profile folder");
+        }
+        const TOP: &[&str] = &[
+            "appdata",
+            "appdata\\local",
+            "appdata\\locallow",
+            "appdata\\roaming",
+            "desktop",
+            "documents",
+            "downloads",
+            "music",
+            "pictures",
+            "videos",
+            "onedrive",
+        ];
+        if let Some(rest) = p.strip_prefix(&format!("{profile}\\"))
+            && TOP.contains(&rest)
+        {
+            return Some("one of your profile's main folders");
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,5 +258,38 @@ mod tests {
 
         delete_permanently(&dir).unwrap();
         assert!(!dir.exists());
+    }
+
+    #[test]
+    fn protected_paths() {
+        let profile = std::env::var("USERPROFILE").unwrap();
+        let windows = std::env::var("SystemRoot").unwrap();
+        for p in [
+            "C:\\".to_string(),
+            "C:".to_string(),
+            format!("{windows}\\System32"),
+            "C:\\Users".to_string(),
+            profile.clone(),
+            format!("{profile}\\Downloads"),
+            format!("{profile}\\AppData\\Local"),
+            "C:\\$Recycle.Bin".to_string(),
+            "C:\\pagefile.sys".to_string(),
+        ] {
+            assert!(
+                protected(Path::new(&p)).is_some(),
+                "{p} should be protected"
+            );
+        }
+        for p in [
+            format!("{profile}\\Downloads\\setup.exe"),
+            format!("{profile}\\AppData\\Local\\Temp"),
+            "D:\\Games\\old".to_string(),
+            format!("{profile}\\projects\\app\\node_modules"),
+        ] {
+            assert!(
+                protected(Path::new(&p)).is_none(),
+                "{p} shouldn't be protected"
+            );
+        }
     }
 }
