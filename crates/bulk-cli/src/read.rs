@@ -11,6 +11,7 @@ use serde::Serialize;
 
 use crate::load::{self, AsOf, Freshness, Loader};
 use crate::out::{self, Table};
+use crate::theme;
 
 /// A file or folder in JSON output.
 #[derive(Serialize)]
@@ -103,6 +104,13 @@ pub fn drives(a: DrivesArgs) -> anyhow::Result<()> {
         } else {
             0.0
         };
+        // Like the app's usage rings: warn under 10% free, alarm under 5%.
+        let th = theme::get();
+        let usage = match 1.0 - frac {
+            f if f < 0.05 => th.usage_full,
+            f if f < 0.10 => th.usage_low,
+            _ => th.usage,
+        };
         let label = if d.label.is_empty() {
             match d.kind {
                 DriveKind::Removable => "USB drive".to_string(),
@@ -116,9 +124,9 @@ pub fn drives(a: DrivesArgs) -> anyhow::Result<()> {
         t.row(vec![
             out::bold(&format!("{}:", d.letter)),
             label,
-            format!("{} free", out::size(d.free)),
-            format!("of {}", out::size(d.total)),
-            out::bar(frac, 12),
+            out::paint(&format!("{} free", out::size(d.free)), usage),
+            out::dim(&format!("of {}", out::size(d.total))),
+            out::bar_in(frac, 12, usage),
             match (d.saved, d.files) {
                 (Some(s), Some(f)) => out::dim(&format!(
                     "{} files · saved {}",
@@ -248,13 +256,13 @@ pub fn top(a: TopArgs) -> anyhow::Result<()> {
         };
         let n = tree.get(id);
         let name = if a.files || a.folders {
-            rel(tree, root, id)
+            out::path_cell(&rel(tree, root, id).trim_end_matches('\\'), n.is_dir())
         } else {
-            shown_name(tree, id)
+            out::path_cell(tree.name(id), n.is_dir())
         };
         t.row(vec![
-            out::size(v.alloc),
-            out::bar(frac, 10),
+            out::size_cell(v.alloc),
+            out::bar_in(frac, 10, theme::get().file(kind_key(tree, id))),
             out::dim(&format!("{:.1}%", frac * 100.0)),
             out::dim(&if n.is_dir() {
                 format!("{} files", out::count(v.files as u64))
@@ -267,6 +275,15 @@ pub fn top(a: TopArgs) -> anyhow::Result<()> {
     t.print();
     out::more(ids.len(), total);
     Ok(())
+}
+
+/// The kind of file `id` is (`video`, `code`…), or `folder`, for its colour.
+pub fn kind_key(tree: &Tree, id: NodeId) -> &'static str {
+    if tree.get(id).is_dir() {
+        "folder"
+    } else {
+        bulk_core::kinds::kind_key(bulk_core::kinds::kind_of(tree.name_lower(id)))
+    }
 }
 
 /// Path of `id` below `base`, e.g. `Videos\clip.mp4`.
@@ -360,15 +377,10 @@ pub fn search(a: SearchArgs) -> anyhow::Result<()> {
     for &(_, i, id) in &hits {
         let tree = &loaded[i].tree;
         let n = tree.get(id);
-        let path = tree.path(id);
         t.row(vec![
-            out::size(n.alloc),
+            out::size_cell(n.alloc),
             out::dim(&out::date(n.mtime)),
-            if n.is_dir() {
-                format!("{path}\\")
-            } else {
-                path
-            },
+            out::path_cell(&tree.path(id), n.is_dir() && id != tree.root),
         ]);
     }
     t.print();
@@ -437,13 +449,16 @@ pub fn types(a: TypesArgs) -> anyhow::Result<()> {
     if a.ext {
         for e in b.exts.iter().take(a.limit) {
             t.row(vec![
-                if e.ext.is_empty() {
-                    "(none)".into()
-                } else {
-                    format!(".{}", e.ext)
-                },
-                out::size(e.alloc),
-                out::bar(frac(e.alloc), 10),
+                out::paint(
+                    &if e.ext.is_empty() {
+                        "(none)".into()
+                    } else {
+                        format!(".{}", e.ext)
+                    },
+                    theme::get().file(e.kind),
+                ),
+                out::size_cell(e.alloc),
+                out::bar_in(frac(e.alloc), 10, theme::get().file(e.kind)),
                 out::dim(&format!("{} files", out::count(e.files))),
                 out::dim(e.kind),
             ]);
@@ -454,9 +469,9 @@ pub fn types(a: TypesArgs) -> anyhow::Result<()> {
         for k in b.kinds.iter().take(a.limit) {
             let exts: Vec<String> = k.exts.iter().take(5).map(|e| format!(".{e}")).collect();
             t.row(vec![
-                k.label.to_string(),
-                out::size(k.alloc),
-                out::bar(frac(k.alloc), 10),
+                out::paint(&format!("● {}", k.label), theme::get().file(k.key)),
+                out::size_cell(k.alloc),
+                out::bar_in(frac(k.alloc), 10, theme::get().file(k.key)),
                 out::dim(&format!("{} files", out::count(k.files))),
                 out::dim(&exts.join(" ")),
             ]);

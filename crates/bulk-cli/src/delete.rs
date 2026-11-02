@@ -154,12 +154,8 @@ fn print(r: &DeleteResult) {
     let mut t = Table::new(&[true, false]);
     for it in &r.items {
         t.row(vec![
-            it.alloc.map(out::size).unwrap_or_else(|| "?".into()),
-            if it.dir {
-                format!("{}\\", it.path)
-            } else {
-                it.path.clone()
-            },
+            it.alloc.map(out::size_cell).unwrap_or_else(|| "?".into()),
+            out::path_cell(&it.path, it.dir),
         ]);
     }
     let n = r.items.len();

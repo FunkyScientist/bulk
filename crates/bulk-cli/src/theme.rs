@@ -15,6 +15,11 @@ pub struct Theme {
     pub warn: Color,
     pub muted: Color,
     pub subtle: Color,
+    pub usage: Color,
+    pub usage_low: Color,
+    pub usage_full: Color,
+    pub grew: Color,
+    pub shrank: Color,
     files: HashMap<String, Color>,
 }
 
@@ -52,6 +57,12 @@ pub fn report() -> bulk_core::export::Theme {
     }
 }
 
+/// The template's colours, read once.
+pub fn get() -> &'static Theme {
+    static THEME: std::sync::OnceLock<Theme> = std::sync::OnceLock::new();
+    THEME.get_or_init(Theme::load)
+}
+
 impl Theme {
     pub fn load() -> Theme {
         let ui = section("dark", "ui");
@@ -66,6 +77,11 @@ impl Theme {
             warn: colour("warn", Color::Yellow),
             muted: colour("fg-muted", Color::Gray),
             subtle: colour("fg-subtle", Color::DarkGray),
+            usage: colour("usage", Color::Magenta),
+            usage_low: colour("usage-low", Color::Yellow),
+            usage_full: colour("usage-full", Color::Red),
+            grew: colour("grew", Color::Red),
+            shrank: colour("shrank", Color::Green),
             files: files
                 .iter()
                 .filter_map(|(k, v)| Some((k.clone(), resolve(&ui, v, 0)?)))

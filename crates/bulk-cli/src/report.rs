@@ -179,7 +179,7 @@ pub fn changes(a: ChangesArgs) -> anyhow::Result<()> {
         out::bold(&new.path(new_root)),
         out::date(entry.meta.taken as u32),
         out::ago(entry.meta.taken),
-        out::bold(&out::delta(new_alloc as i64 - old_alloc as i64)),
+        out::bold(&out::delta_cell(new_alloc as i64 - old_alloc as i64)),
         out::size(old_alloc),
         out::size(new_alloc)
     );
@@ -191,18 +191,22 @@ pub fn changes(a: ChangesArgs) -> anyhow::Result<()> {
             diff::Status::Removed => "gone",
             diff::Status::Changed => "",
         };
-        let shown = match new.find_path(&r.path) {
-            Some(id) if !a.files => crate::read::rel(new, base, id),
-            _ => {
-                let p = r
-                    .path
-                    .strip_prefix(&new.path(base))
-                    .map(|p| p.trim_start_matches('\\').to_string())
-                    .unwrap_or_else(|| r.path.clone());
-                if r.dir { format!("{p}\\") } else { p }
-            }
+        let shown = r
+            .path
+            .strip_prefix(&new.path(base))
+            .map(|p| p.trim_start_matches('\\').to_string())
+            .unwrap_or_else(|| r.path.clone());
+        let th = crate::theme::get();
+        let status = match r.status {
+            diff::Status::Added => out::paint(status, th.ok),
+            diff::Status::Removed => out::paint(status, th.danger),
+            diff::Status::Changed => String::new(),
         };
-        t.row(vec![out::delta(r.delta), out::dim(status), shown]);
+        t.row(vec![
+            out::delta_cell(r.delta),
+            status,
+            out::path_cell(&shown, r.dir),
+        ]);
     }
     t.print();
     if rows.is_empty() {
@@ -275,6 +279,8 @@ struct JunkResult {
     /// What's worth a look before deleting, bytes.
     review: u64,
     findings: Vec<junk::Finding>,
+    /// Kinds and paths hidden in the app's Cleanup tab, left out here too.
+    hidden: Vec<String>,
 }
 
 /// Space that can usually be got back, and how safe each kind is to remove.
@@ -308,6 +314,9 @@ pub fn junk(a: JunkArgs) -> anyhow::Result<()> {
             }
         }
     }
+    // What was hidden in the app's Cleanup tab stays hidden here.
+    let hidden = bulk_core::settings::load().cleanup_ignore;
+    let mut findings = junk::without(findings, &hidden);
     findings.sort_by(|a, b| b.alloc.cmp(&a.alloc));
     let sum = |s: Safety| {
         findings
@@ -328,41 +337,52 @@ pub fn junk(a: JunkArgs) -> anyhow::Result<()> {
             safe,
             review,
             findings,
+            hidden,
         });
     }
     if findings.is_empty() {
         println!("{}", out::dim("Nothing obvious to clean up."));
         return Ok(());
     }
+    let th = crate::theme::get();
     println!(
         "{} safe to delete · {} worth a look",
-        out::bold(&out::size(safe)),
-        out::bold(&out::size(review))
+        out::bold(&out::paint(&out::size(safe), th.ok)),
+        out::bold(&out::paint(&out::size(review), th.warn))
     );
     for f in &findings {
-        let tag = match f.safety {
-            Safety::Safe => "safe",
-            Safety::Review => "review",
-            Safety::Info => "info",
+        let (tag, c) = match f.safety {
+            Safety::Safe => (" safe ", th.ok),
+            Safety::Review => (" check first ", th.warn),
+            Safety::Info => (" good to know ", th.muted),
         };
         println!();
         println!(
             "{}  {}  {}",
             out::bold(&format!("{:>9}", out::size(f.alloc))),
             out::bold(f.label),
-            out::dim(&format!("[{tag}]"))
+            out::paint(tag, c)
         );
         println!("           {}", out::dim(f.why));
         let mut t = Table::new(&[true, false]);
         for it in &f.items {
             t.row(vec![
-                format!("{:>9}", out::size(it.alloc)),
-                out::dim(&it.path),
+                format!("{:>9}", out::size_cell(it.alloc)),
+                out::path_cell(&it.path, false),
             ]);
         }
         t.print();
     }
     println!();
+    if !hidden.is_empty() {
+        println!(
+            "{}",
+            out::dim(&format!(
+                "{} hidden in the app's Cleanup tab.",
+                out::count(hidden.len() as u64)
+            ))
+        );
+    }
     println!(
         "{}",
         out::dim("Delete with: bulk delete <path> (it lists first; add --yes to do it)")
@@ -470,7 +490,11 @@ pub fn dupes(a: DupesArgs) -> anyhow::Result<()> {
             ))
         );
         for f in &g.files {
-            println!("  {}  {}", out::dim(&out::date(f.mtime)), f.path);
+            println!(
+                "  {}  {}",
+                out::dim(&out::date(f.mtime)),
+                out::path_cell(&f.path, false)
+            );
         }
     }
     out::more(groups.len(), total);

@@ -2,7 +2,10 @@
 
 use std::io::{IsTerminal, Write};
 
+use ratatui::style::Color;
 use serde::Serialize;
+
+use crate::theme;
 
 pub fn size(b: u64) -> String {
     bulk_core::export::human(b)
@@ -62,25 +65,71 @@ pub fn date(unix: u32) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
-/// Whether to colour stdout: a terminal, and NO_COLOR isn't set.
+/// Whether to colour stdout: a terminal that understands colour codes (this also
+/// turns them on in older consoles), and NO_COLOR isn't set.
 pub fn colour() -> bool {
-    std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none()
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::io::stdout().is_terminal()
+            && std::env::var_os("NO_COLOR").is_none()
+            && ratatui::crossterm::ansi_support::supports_ansi()
+    })
+}
+
+fn style(code: &str, s: &str) -> String {
+    if colour() && !s.is_empty() {
+        format!("\x1b[{code}m{s}\x1b[0m")
+    } else {
+        s.to_string()
+    }
 }
 
 pub fn dim(s: &str) -> String {
-    if colour() {
-        format!("\x1b[2m{s}\x1b[0m")
-    } else {
-        s.to_string()
-    }
+    style("2", s)
 }
 
 pub fn bold(s: &str) -> String {
-    if colour() {
-        format!("\x1b[1m{s}\x1b[0m")
-    } else {
-        s.to_string()
+    style("1", s)
+}
+
+/// `s` in a template colour.
+pub fn paint(s: &str, c: Color) -> String {
+    match c {
+        Color::Rgb(r, g, b) => style(&format!("38;2;{r};{g};{b}"), s),
+        _ => s.to_string(),
     }
+}
+
+/// A size, louder the bigger it is: bold from a gigabyte, faint under a megabyte.
+pub fn size_cell(b: u64) -> String {
+    let s = size(b);
+    if b >= 1 << 30 {
+        bold(&paint(&s, theme::get().warn))
+    } else if b < 1 << 20 {
+        dim(&s)
+    } else {
+        s
+    }
+}
+
+/// A change in size, in the template's grew and shrank colours.
+pub fn delta_cell(d: i64) -> String {
+    let t = theme::get();
+    paint(&delta(d), if d >= 0 { t.grew } else { t.shrank })
+}
+
+/// A path with its folders faint and its name bright; folders in the folder colour.
+pub fn path_cell(path: &str, dir: bool) -> String {
+    let (parent, name) = match path.rsplit_once('\\') {
+        Some((p, n)) if !n.is_empty() => (format!("{p}\\"), n),
+        _ => (String::new(), path),
+    };
+    let name = if dir {
+        paint(&format!("{name}\\"), theme::get().file("folder"))
+    } else {
+        name.to_string()
+    };
+    format!("{}{name}", dim(&parent))
 }
 
 /// A share bar `width` cells wide.
@@ -93,6 +142,14 @@ pub fn bar(frac: f64, width: usize) -> String {
     let used = s.chars().count();
     s.push_str(&" ".repeat(width.saturating_sub(used)));
     s
+}
+
+/// A share bar in a colour, on a faint track.
+pub fn bar_in(frac: f64, width: usize, c: Color) -> String {
+    let b = bar(frac, width);
+    let filled = b.trim_end().to_string();
+    let rest = width.saturating_sub(filled.chars().count());
+    format!("{}{}", paint(&filled, c), dim(&"·".repeat(rest)))
 }
 
 pub fn json(v: &impl Serialize) -> anyhow::Result<()> {
