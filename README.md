@@ -36,6 +36,7 @@ It's built with Rust (scanning, data, layouts) and Svelte 5 inside Tauri 2 (the 
 | **Duplicate finder** | Finds identical files by content, not name. |
 | **Exports** | A shareable HTML report, CSV or JSON for the current folder, the changes, or the duplicates. |
 | **Explorer integration** | "Analyze with Bulk" on any folder or drive's right-click menu. |
+| **Command line** | `bulk .` opens a folder in the app; `bulk` on its own is an interactive finder; `bulk top`, `search`, `junk`, `changes`, `delete`… print tables or JSON for scripts and AI agents. |
 | **Scheduled snapshots** | Optional daily or weekly snapshots in the background, even when Bulk is closed. |
 
 ---
@@ -344,6 +345,94 @@ the reason. Bulk keeps its own five templates up to date but never overwrites on
 you've edited (it remembers what it wrote in `.shipped.json`); delete one to get the
 original back.
 
+### Command line
+
+The installer puts `bulk` on PATH (from `C:\Program Files\Bulk\bin`). It reads the
+same snapshots as the app and brings them up to date through the helper, so answers
+are current without the app being open.
+
+```bash
+bulk .                       # open this folder in the app (a file opens with it selected)
+bulk                         # interactive finder in this folder
+bulk drives                  # free space on each drive
+bulk top                     # what's biggest in this folder
+bulk top C:\Users --files    # biggest files anywhere below
+bulk search "kind:video size:>1GB"
+bulk types ~ --ext           # space per kind of file, or per extension
+bulk junk                    # space that can usually be got back
+bulk changes --since 7d      # what grew or shrank in the last week
+bulk dupes D:\Photos         # identical files
+bulk export . -o report.html # same report as the app's Export button
+bulk delete <paths>          # lists what would go; add --yes to recycle it
+bulk restore                 # recent deletes; `bulk restore 3` puts one back
+```
+
+`bulk --help` and `bulk <command> --help` describe every option; `bulk search
+--help` has the [search syntax](#search-ctrlk), which `--filter` options take too.
+Quote searches with `|`, `>` or `<`, and use `!` rather than `-` to leave things out
+(`bulk search "ext:log !in:temp"`).
+
+**Freshness.** Each command loads the drive's last snapshot, catches it up from the
+change journal, and rescans the drive (about 5 seconds) if the journal no longer
+reaches back that far. `--no-scan` uses the snapshot as it is; `--rescan` always
+scans. While the app is closed, the CLI saves what it caught up so the next run (or
+the app) starts from there. Without fast mode, commands use the snapshot as it is.
+
+**For scripts and agents.** Every command takes `--json`, with sizes in bytes, full
+paths, ISO dates and an `asOf` block saying when the data is from and whether it's
+`live`, `scanned` or a `snapshot`. Lists are cut to `-n` items with the full count in
+`total`. Commands exit with 1 on an error, and `bulk delete --yes` exits with 1 if
+anything wasn't deleted.
+
+**Deleting safely.** `bulk delete`:
+
+- only lists what it would do until you add `--yes`;
+- moves things to the Recycle Bin; `--permanently-delete` skips the bin and can't be
+  undone;
+- refuses whole drives, Windows, Program Files, ProgramData, user and profile
+  folders (Desktop, Documents, Downloads, AppData…, though what's *in* them is fine),
+  files marked as system files, and Bulk's own files. If anything is refused,
+  nothing is deleted;
+- stops above 50 GB in one go unless `--max` says otherwise;
+- takes `--query "<search>" --in <folder>` to delete everything a search finds in a
+  folder (up to 10,000 items);
+- logs every run in `%LOCALAPPDATA%\Bulk\deleted.jsonl`; `bulk restore <number>`
+  puts recycled items back.
+
+**`bulk junk`** looks for build output (`node_modules`, Rust `target` folders,
+Python caches and virtual environments), package manager caches, browser caches,
+temp files older than a week, crash dumps, old installers in Downloads, and lists
+things worth knowing about but not deleting by hand (the Recycle Bin, Windows Update
+downloads, virtual disks, the page and hibernation files). Each is marked `safe`,
+`review` (check first; build output still in use within 30 days is marked this way)
+or `info`. Packages bundled inside installed programs are left out.
+
+**The finder** (`bulk` or `bulk find [search] [--in folder]`) searches as you type
+with the same syntax as Ctrl+K, and browses folders by size when the search is empty.
+It stays live while open. Results show size, a bar in the file type's colour from
+your colour template, and the date; the panel on the right shows details, the
+biggest things inside a folder and what types fill it.
+
+| Keys | Action |
+|---|---|
+| Type | Search |
+| → / ← | Into a folder / up a level (at the end / start of the search) |
+| Tab, Shift+Tab | Pick or unpick, and move |
+| Ctrl+A | Pick everything listed |
+| Enter | Print the picked paths (or the highlighted one) and quit |
+| Ctrl+O / Ctrl+E / Ctrl+B | Open / show in Explorer / show in the Bulk app |
+| Alt+C | Copy the paths |
+| Ctrl+D | Move to the Recycle Bin, after a confirmation |
+| Ctrl+R | Search this folder, the whole drive, or every drive |
+| Ctrl+S | Sort by best match, size, newest or name |
+| Ctrl+P / Ctrl+N | Earlier / later searches |
+| Esc | Clear the search, or quit |
+| F1 | All the keys |
+
+Enter prints to stdout while the finder draws on the terminal, so it works in
+pipelines like fzf: `code (bulk find ext:log)` in PowerShell. `--print0` separates
+paths with NUL, `--json` prints full details.
+
 ---
 
 ## How it works
@@ -546,8 +635,11 @@ change first, and folders are only compared when you expand them.
 
 ```
 crates/
-  bulk-core/            everything that isn't UI; reusable for a future CLI/TUI
+  bulk-core/            everything that isn't UI, shared by the app, helper and CLI
     src/
+      drive.rs          a drive's tree without the app: snapshot, catch-up or scan
+      os.rs             open, show in Explorer, find the app and install folder
+      junk.rs           reclaimable space rules for `bulk junk`
       scan/mft.rs       NTFS MFT reader
       scan/walk.rs      parallel folder walker
       tree.rs           arena tree, aggregation, live edits, merge, gone/new marks
@@ -561,13 +653,23 @@ crates/
       diff.rs           snapshot vs live comparison
       dupes.rs          duplicate finder
       export.rs         HTML/CSV/JSON reports (folder, changes, duplicates)
-      trash.rs          Recycle Bin, permanent delete, restore
+      trash.rs          Recycle Bin, permanent delete, restore, protected paths
       settings.rs       settings.json shared with the helper
       volume.rs         drive list, types, free space
     examples/           bench.rs, compare.rs, dupebench.rs
   bulk-helper/
     src/main.rs         elevated helper: --serve, --install, --uninstall, --snapshot-all
     src/bin/probe.rs    dev tool: scan through the helper, or ask it to exit
+  bulk-cli/             the `bulk` command (built as bulk-cli.exe, installed as bin\bulk.exe)
+    src/
+      main.rs           commands and the search syntax help
+      load.rs           loading drives with progress, typed paths, --json freshness
+      read.rs           drives, top, search, types
+      report.rs         changes, snapshots, junk, dupes, export
+      delete.rs         delete, restore, the delete log
+      find.rs           the interactive finder (ratatui)
+      theme.rs          colours from the app's colour template
+      out.rs            sizes, dates, tables, JSON
 src-tauri/              Bulk.exe backend
   src/
     lib.rs              app setup, command registration
@@ -615,10 +717,18 @@ interfere with an installed copy. The first run asks for elevation once to regis
 `pnpm dev:app` (run automatically by `tauri dev`) asks a running dev helper to exit
 before rebuilding it, because Windows locks a running exe.
 
+The CLI builds as `target\debug\bulk-cli.exe` (so it doesn't overwrite the app's
+`bulk.exe` there); it uses the dev helper because it sits in the same folder:
+
+```bash
+cargo build -p bulk-cli
+.\target\debug\bulk-cli.exe top .
+```
+
 ### Checks
 
 ```bash
-cargo test -p bulk-core
+cargo test -p bulk-core -p bulk-cli
 cargo clippy --workspace
 pnpm check
 pnpm format
@@ -658,17 +768,18 @@ The helper logs to `%LOCALAPPDATA%\Bulk\helper.log`.
 pnpm bundle
 ```
 
-This builds the release helper and app and produces a per-machine NSIS installer in
-`target/release/bundle/nsis/`. `tauri.release.conf.json` adds the helper to the
-installer; it's kept out of the main config because Tauri would otherwise copy it over
-the dev helper in `target/debug`.
+This builds the release helper, CLI and app and produces a per-machine NSIS installer
+in `target/release/bundle/nsis/`. `tauri.release.conf.json` adds the helper and the
+CLI (as `bin\bulk.exe`) to the installer; it's kept out of the main config because
+Tauri would otherwise copy the helper over the dev helper in `target/debug`.
 
 The installer:
 
 - installs into Program Files (see [Security model](#security-model) for why),
 - stops a running helper before upgrading,
-- on uninstall, runs `bulk-helper --uninstall` (removes both scheduled tasks) and
-  removes the Explorer menu entries.
+- adds `bin` (only the CLI, not `Bulk.exe`) to the system PATH,
+- on uninstall, runs `bulk-helper --uninstall` (removes both scheduled tasks),
+  removes the Explorer menu entries and takes `bin` off PATH.
 
 ---
 
@@ -679,11 +790,13 @@ The installer:
   program could swap it and gain admin rights. Dev builds run the helper from `target\`,
   which is fine only on your own machine while developing.
 - **Pipe access.** The pipe's security descriptor admits only your account and SYSTEM,
-  and the helper also checks that the connecting program is in its own folder.
+  and the helper also checks that the connecting program is in its own folder (or,
+  for the CLI, its `bin` subfolder; both are in Program Files).
 - **Read-only helper.** It scans and reports changes; it can also create or delete its
   own snapshot task. It never deletes or writes your files.
 - **Deleting happens as you.** Recycling and permanent deletes run in the normal app
-  with your own rights, through the Windows shell.
+  or CLI with your own rights, through the Windows shell. The CLI also refuses
+  system, program and profile folders outright.
 - **Explorer menu** entries are per-user (`HKCU`) and point at the installed app.
 
 ---
