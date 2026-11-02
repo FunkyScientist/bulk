@@ -97,8 +97,11 @@ pub fn on_second_instance(app: &AppHandle, args: Vec<String>) {
         let _ = w.show();
         let _ = w.set_focus();
     }
+    // Keep the path until the window takes it: while the app is still starting,
+    // nothing is listening for the event yet.
     if let Some(p) = open_arg(&args) {
-        let _ = app.emit("open-path", p);
+        *app.state::<OpenState>().0.lock().unwrap() = Some(p);
+        let _ = app.emit("open-path", ());
     }
 }
 

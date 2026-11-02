@@ -125,7 +125,10 @@ class AppState {
     await listen<string>('drive-live', (e) => this.driveChanged(e.payload));
     await listen('cart-changed', async () => (this.cart = await api.cartGet()));
     // "Analyze with Bulk" from Explorer while we're already open.
-    await listen<string>('open-path', (e) => void this.openPath(e.payload));
+    await listen('open-path', async () => {
+      const path = await api.takeOpenPath();
+      if (path) void this.openPath(path);
+    });
     this.cart = await api.cartGet();
     this.templateId = (await api.settingsGet()).template || 'default';
     void this.loadTemplates();
@@ -216,6 +219,7 @@ class AppState {
     }
     this.tab = 'browse';
     if (id === 0) this.setFocus(letter, null);
+    else if (!(await api.nodeInfo(letter, id)).dir) await this.goTo(letter, id);
     else {
       this.setFocus(letter, id);
       this.selectNode(id, true);

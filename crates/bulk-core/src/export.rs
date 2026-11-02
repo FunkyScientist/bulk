@@ -116,7 +116,8 @@ impl Theme {
     }
 }
 
-fn iso(unix: u32) -> String {
+/// `2024-03-09T14:05:00Z` from unix seconds; empty for 0.
+pub fn iso(unix: u32) -> String {
     if unix == 0 {
         return String::new();
     }
