@@ -31,11 +31,10 @@
 <header class="relative flex h-10 shrink-0 items-center" data-tauri-drag-region>
   <div class="pointer-events-none flex items-center gap-2 pl-4" data-tauri-drag-region>
     <svg viewBox="0 0 1024 1024" class="size-4" aria-hidden="true">
-      <rect x="64" y="64" width="896" height="896" rx="208" fill="var(--panel-2)" />
-      <rect x="208" y="208" width="368" height="608" rx="56" fill="var(--logo-1)" />
-      <rect x="608" y="208" width="208" height="288" rx="48" fill="var(--logo-2)" />
-      <rect x="608" y="528" width="208" height="128" rx="40" fill="var(--logo-3)" />
-      <rect x="608" y="688" width="208" height="128" rx="32" fill="var(--logo-4)" />
+      <rect x="64" y="64" width="896" height="896" rx="224" fill="var(--fg)" />
+      <rect x="232" y="232" width="288" height="560" rx="40" fill="var(--app-bg)" />
+      <rect x="232" y="504" width="560" height="288" rx="40" fill="var(--app-bg)" />
+      <rect x="560" y="232" width="232" height="232" rx="40" fill="var(--logo-1)" />
     </svg>
     <span class="text-[12.5px] font-medium tracking-tight text-fg-muted">Bulk</span>
   </div>

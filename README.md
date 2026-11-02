@@ -353,7 +353,7 @@ To make your own, copy one of the files, rename it, edit the colours, and press
   | Markers | `added`, `removed` (live new/deleted), `cart` |
   | Changes tab | `grew`, `shrank` |
   | Charts | `chart-folder`, `chart-hatch`, `chart-hover`, `chart-hover-line`, `chart-select`, `chart-label` (or `auto`), `chart-label-folder` |
-  | Title bar | `close-hover`, `close-fg`, `logo-1` … `logo-4` |
+  | Title bar | `close-hover`, `close-fg`, `logo-1` (the logo's lifted tile) |
 
   Values can point at other colours: the default sets `usage-full` to
   `var(--danger)`, so it follows whatever a template uses for danger unless the

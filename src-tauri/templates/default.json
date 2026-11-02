@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "name": "Bulk",
   "description": "The original: soft violet on deep grey.",
   "dark": {
@@ -39,9 +39,6 @@
       "close-hover": "#c42b1c",
       "close-fg": "#ffffff",
       "logo-1": "var(--accent)",
-      "logo-2": "#3fd0c9",
-      "logo-3": "#f5b544",
-      "logo-4": "#ff6b8b",
       "bar-end": "color-mix(in oklab, var(--accent) 70%, white)",
       "backdrop": "rgba(0, 0, 0, 0.32)",
       "chart-folder": "rgba(255, 255, 255, 0.028)",
@@ -121,9 +118,6 @@
       "close-hover": "#c42b1c",
       "close-fg": "#ffffff",
       "logo-1": "var(--accent)",
-      "logo-2": "#3fd0c9",
-      "logo-3": "#f5b544",
-      "logo-4": "#ff6b8b",
       "bar-end": "color-mix(in oklab, var(--accent) 70%, white)",
       "backdrop": "rgba(0, 0, 0, 0.28)",
       "chart-folder": "rgba(20, 20, 60, 0.03)",

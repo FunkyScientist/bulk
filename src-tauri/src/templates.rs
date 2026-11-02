@@ -60,7 +60,7 @@ ui         Window and text
              chart-label (text on file tiles, or \"auto\" to pick dark or light
              per tile), chart-label-folder
            Title bar
-             close-hover, close-fg, logo-1, logo-2, logo-3, logo-4
+             close-hover, close-fg, logo-1 (the logo's lifted tile)
 
            Values can refer to other colours, like \"var(--danger)\" or
            \"color-mix(in oklab, var(--accent) 70%, white)\". The default template

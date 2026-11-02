@@ -248,7 +248,7 @@ pub fn human(b: u64) -> String {
 }
 
 const REPORT_CSS: &str = r#"
-:root{--bg:#f7f7fa;--card:#fff;--fg:#16161d;--muted:#5f5f70;--subtle:#8c8c9c;--line:rgba(16,16,40,.08);--track:rgba(16,16,40,.06);--folder:rgba(20,20,60,.045);--collapsed:rgba(106,88,245,.16);--accent:#6a58f5;--shadow:0 1px 2px rgba(16,16,40,.04),0 8px 24px -12px rgba(16,16,40,.12);--up:#e5405e;--down:#17a67b;--logo-1:var(--accent);--logo-2:#3fd0c9;--logo-3:#f5b544;--logo-4:#ff6b8b;--c0:#6a58f5;--c1:#9aa1b2;--c2:#f0506f;--c3:#e0a020;--c4:#a865f5;--c5:#f27c35;--c6:#16b2aa;--c7:#3b88f0;--c8:#7a6cf2;--c9:#e055a8;--c10:#6f9a8d}
+:root{--bg:#f7f7fa;--card:#fff;--fg:#16161d;--muted:#5f5f70;--subtle:#8c8c9c;--line:rgba(16,16,40,.08);--track:rgba(16,16,40,.06);--folder:rgba(20,20,60,.045);--collapsed:rgba(106,88,245,.16);--accent:#6a58f5;--shadow:0 1px 2px rgba(16,16,40,.04),0 8px 24px -12px rgba(16,16,40,.12);--up:#e5405e;--down:#17a67b;--logo-1:var(--accent);--c0:#6a58f5;--c1:#9aa1b2;--c2:#f0506f;--c3:#e0a020;--c4:#a865f5;--c5:#f27c35;--c6:#16b2aa;--c7:#3b88f0;--c8:#7a6cf2;--c9:#e055a8;--c10:#6f9a8d}
 @media (prefers-color-scheme:dark){:root{--bg:#0f0f14;--card:#17171e;--fg:#ececf2;--muted:#a3a3b5;--subtle:#6e6e80;--line:rgba(255,255,255,.07);--track:rgba(255,255,255,.06);--folder:rgba(255,255,255,.03);--collapsed:rgba(139,124,255,.2);--accent:#8b7cff;--shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px -16px rgba(0,0,0,.6);--up:#ff6b81;--down:#3fd0a4;--c0:#8b7cff;--c1:#7d8496;--c2:#ff6b8b;--c3:#f5b544;--c4:#c38bff;--c5:#ff9a5a;--c6:#3fd0c9;--c7:#5fa8ff;--c8:#9d92ff;--c9:#f37bc4;--c10:#8fb3a8}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 "Geist",ui-sans-serif,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
@@ -312,7 +312,7 @@ map.addEventListener('mousemove',e=>{
 map.addEventListener('mouseleave',()=>tip.style.opacity=0);
 "#;
 
-const LOGO: &str = r##"<svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="208" y="208" width="368" height="608" rx="56" style="fill:var(--logo-1)"/><rect x="608" y="208" width="208" height="288" rx="48" style="fill:var(--logo-2)"/><rect x="608" y="528" width="208" height="128" rx="40" style="fill:var(--logo-3)"/><rect x="608" y="688" width="208" height="128" rx="32" style="fill:var(--logo-4)"/></svg>"##;
+const LOGO: &str = r##"<svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="64" y="64" width="896" height="896" rx="224" style="fill:var(--fg)"/><rect x="232" y="232" width="288" height="560" rx="40" style="fill:var(--bg)"/><rect x="232" y="504" width="560" height="288" rx="40" style="fill:var(--bg)"/><rect x="560" y="232" width="232" height="232" rx="40" style="fill:var(--logo-1)"/></svg>"##;
 
 /// A single-file HTML report: treemap, largest folders and files, and file types.
 pub fn write_html(
