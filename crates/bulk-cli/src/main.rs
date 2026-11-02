@@ -2,9 +2,11 @@
 //! them current through the elevated helper, and can open folders in the app.
 
 mod delete;
+mod find;
 mod load;
 mod out;
 mod read;
+mod theme;
 
 use std::path::PathBuf;
 
@@ -67,6 +69,9 @@ enum Cmd {
     Search(read::SearchArgs),
     /// Space used by each kind of file, or each extension
     Types(read::TypesArgs),
+    /// Search and browse interactively (what `bulk` on its own does)
+    #[command(after_long_help = QUERY_HELP)]
+    Find(find::FindArgs),
     /// Move files or folders to the Recycle Bin (lists them first; add --yes)
     Delete(delete::DeleteArgs),
     /// Put back what `bulk delete` recycled, or list recent deletes
@@ -78,7 +83,7 @@ fn main() {
     let r = match (cli.cmd, cli.path) {
         (Some(cmd), _) => run(cmd),
         (None, Some(path)) => open(&path),
-        (None, None) => open(&PathBuf::from(".")),
+        (None, None) => find::find(find::FindArgs::default()),
     };
     if let Err(e) = r {
         eprintln!("bulk: {e:#}");
@@ -93,6 +98,7 @@ fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Top(a) => read::top(a),
         Cmd::Search(a) => read::search(a),
         Cmd::Types(a) => read::types(a),
+        Cmd::Find(a) => find::find(a),
         Cmd::Delete(a) => delete::delete(a),
         Cmd::Restore(a) => delete::restore(a),
     }

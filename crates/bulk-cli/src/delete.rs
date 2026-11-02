@@ -47,11 +47,11 @@ fn parse_size(s: &str) -> Result<u64, String> {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct Target {
-    path: String,
-    dir: bool,
+pub struct Target {
+    pub path: String,
+    pub dir: bool,
     /// Size on disk, when the scan knows it.
-    alloc: Option<u64>,
+    pub alloc: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -199,7 +199,7 @@ fn print(r: &DeleteResult) {
 
 /// Why `id` mustn't be deleted, beyond its path: the attributes Windows sets on
 /// its own files.
-fn node_refusal(l: &bulk_core::drive::Loaded, id: NodeId) -> Option<&'static str> {
+pub fn node_refusal(l: &bulk_core::drive::Loaded, id: NodeId) -> Option<&'static str> {
     let n = l.tree.get(id);
     if n.has(flags::SYSTEM) {
         Some("marked as a system file")
@@ -242,7 +242,7 @@ fn from_paths(loader: &Loader, paths: &[PathBuf]) -> anyhow::Result<(Vec<Target>
         targets.push(Target {
             alloc: id
                 .map(|id| l.tree.get(id).alloc)
-                .or_else(|| meta.is_file().then(|| meta.len())),
+                .or_else(|| meta.is_file().then_some(meta.len())),
             path,
             dir: meta.is_dir(),
         });
@@ -297,7 +297,7 @@ fn from_query(
 }
 
 /// Drop anything inside another target: deleting the folder covers it.
-fn topmost(mut targets: Vec<Target>) -> Vec<Target> {
+pub fn topmost(mut targets: Vec<Target>) -> Vec<Target> {
     targets.sort_by_key(|t| t.path.to_ascii_lowercase());
     let mut out: Vec<Target> = Vec::new();
     for t in targets {
@@ -341,7 +341,7 @@ fn batches() -> Vec<Batch> {
         .collect()
 }
 
-fn log_batch(started: SystemTime, permanent: bool, items: &[Target]) -> anyhow::Result<u32> {
+pub fn log_batch(started: SystemTime, permanent: bool, items: &[Target]) -> anyhow::Result<u32> {
     let id = batches().last().map_or(1, |b| b.id + 1);
     let b = Batch {
         id,

@@ -452,10 +452,10 @@ dependencies = [
  "anyhow",
  "bulk-core",
  "clap",
- "crossterm",
  "ratatui",
  "serde",
  "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

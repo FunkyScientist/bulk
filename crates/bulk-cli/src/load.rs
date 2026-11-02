@@ -32,7 +32,12 @@ pub struct Loader {
     opts: Options,
     helper: OnceCell<Option<Client>>,
     progress: bool,
+    /// Where progress goes instead of stderr (`bulk find` draws its own screen).
+    status: Option<Status>,
 }
+
+/// The latest progress message, for a UI to show.
+pub type Status = std::sync::Arc<std::sync::Mutex<String>>;
 
 impl Loader {
     pub fn new(f: &Freshness) -> Loader {
@@ -43,6 +48,23 @@ impl Loader {
             },
             helper: OnceCell::new(),
             progress: std::io::stderr().is_terminal(),
+            status: None,
+        }
+    }
+
+    /// A loader that reports into `status` and prints nothing.
+    pub fn quiet(f: &Freshness, status: Status) -> Loader {
+        Loader {
+            status: Some(status),
+            progress: false,
+            ..Loader::new(f)
+        }
+    }
+
+    fn note(&self, msg: &str) {
+        match &self.status {
+            Some(s) => *s.lock().unwrap() = msg.to_string(),
+            None => eprintln!("{}", out::dim(msg)),
         }
     }
 
@@ -51,12 +73,9 @@ impl Loader {
             .get_or_init(|| {
                 let c = drive::helper();
                 if c.is_none() {
-                    eprintln!(
-                        "{}",
-                        out::dim(
-                            "Fast mode isn't available, so drives can't be brought up to date \
-                             quickly. Allow it in the Bulk app."
-                        )
+                    self.note(
+                        "Fast mode isn't available, so drives can't be brought up to date \
+                         quickly. Allow it in the Bulk app.",
                     );
                 }
                 c
@@ -72,7 +91,7 @@ impl Loader {
         let helper = if vol.is_ntfs() { self.helper() } else { None };
         let mut last = std::time::Instant::now() - std::time::Duration::from_secs(1);
         let l = drive::load(&vol, helper, &self.opts, |s| {
-            if !self.progress || last.elapsed().as_millis() < 100 {
+            if !(self.progress || self.status.is_some()) || last.elapsed().as_millis() < 100 {
                 return;
             }
             last = std::time::Instant::now();
@@ -85,6 +104,10 @@ impl Loader {
                     out::size(p.bytes)
                 ),
             };
+            if let Some(status) = &self.status {
+                *status.lock().unwrap() = msg;
+                return;
+            }
             eprint!("\r\x1b[2K{msg}");
             let _ = std::io::stderr().flush();
         });
@@ -93,13 +116,10 @@ impl Loader {
         }
         let l = l?;
         if l.fresh == Fresh::Snapshot && self.opts.scan && l.meta.journal.is_some() {
-            eprintln!(
-                "{}",
-                out::dim(&format!(
-                    "{letter}: is a snapshot from {}; pass --rescan to scan it now.",
-                    out::ago(l.meta.taken)
-                ))
-            );
+            self.note(&format!(
+                "{letter}: is a snapshot from {}; pass --rescan to scan it now.",
+                out::ago(l.meta.taken)
+            ));
         }
         let _ = drive::save(&l);
         Ok(l)
