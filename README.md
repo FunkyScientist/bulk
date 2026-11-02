@@ -32,6 +32,7 @@ It's built with Rust (scanning, data, layouts) and Svelte 5 inside Tauri 2 (the 
 | **Search everywhere** | Ctrl+K searches every scanned drive in milliseconds: wildcards (`IMG_2024*.jpg`), paths (`Downloads/invoice`), filters like `kind:video size:>1GB modified:<30d`, exclusions and OR. Select results and send them to the cleanup cart. |
 | **Filter the view** | Limit the list, treemap and sunburst to any search (`kind:video`, `size:>1GB`, …); folder sizes count only what matches. |
 | **Storage by type** | How much space videos, spreadsheets, archives… take, or every extension on its own, for the drive or the folder you're in. |
+| **Cleanup suggestions** | Build output, caches, old temp files and downloads you can usually delete, marked safe or check-first, ready to send to the cart. |
 | **Cleanup cart** | Collect files and folders from anywhere, review, then send them to the Recycle Bin (with undo) or delete permanently. |
 | **Duplicate finder** | Finds identical files by content, not name. |
 | **Exports** | A shareable HTML report, CSV or JSON for the current folder, the changes, or the duplicates. |
@@ -221,6 +222,28 @@ the palette instead, biggest first, ready to select and add to the cart.
 
 Either way, deleted items stay greyed out until the next rescan.
 
+### Cleanup
+
+The **Cleanup** tab lists space that can usually be got back, for the whole drive or
+the folder open in Browse: build output (`node_modules`, Rust `target` folders,
+Python caches and virtual environments), package manager caches, browser caches,
+temp files older than a week, crash dumps and old installers in Downloads. Each kind
+is marked **Safe** (rebuilt or downloaded again when needed), **Check first** (build
+output still in use within 30 days, caches that make installs slower) or **Good to
+know** (the Recycle Bin, Windows Update downloads, virtual disks, the page and
+hibernation files, which have a button or a note instead of checkboxes). Folders that
+belong to installed programs (Program Files, AppData, tools' dot-folders like
+`~\.vscode`) are left out of the build-output rules.
+
+- Tick items, or a whole kind, and *Add to cart*; *Add all safe to cart* takes
+  everything marked safe. Nothing is deleted from the tab itself: it all goes through
+  the cart's review and Recycle Bin.
+- Click a path to show it in Browse; hover for Explorer.
+- The eye button hides one item or a whole kind for good; *N hidden* brings them
+  back. `bulk junk` hides the same ones.
+- The drive header shows *N GB to clean up* when there's at least 100 MB marked safe;
+  clicking it opens the tab.
+
 ### What changed
 
 Pick an earlier snapshot to compare against. The list shows what grew or shrank,
@@ -405,13 +428,22 @@ temp files older than a week, crash dumps, old installers in Downloads, and list
 things worth knowing about but not deleting by hand (the Recycle Bin, Windows Update
 downloads, virtual disks, the page and hibernation files). Each is marked `safe`,
 `review` (check first; build output still in use within 30 days is marked this way)
-or `info`. Packages bundled inside installed programs are left out.
+or `info`, the same as the app's [Cleanup](#cleanup) tab, and anything hidden there
+is left out here too.
+
+**Colours.** Tables use your colour template: file-type colours on the bars, sizes
+over a gigabyte in the warning colour, faint folders and bright names in paths, green
+for safe and yellow for check-first. They're off when the output is piped or
+`NO_COLOR` is set.
 
 **The finder** (`bulk` or `bulk find [search] [--in folder]`) searches as you type
 with the same syntax as Ctrl+K, and browses folders by size when the search is empty.
-It stays live while open. Results show size, a bar in the file type's colour from
-your colour template, and the date; the panel on the right shows details, the
-biggest things inside a folder and what types fill it.
+Searching runs beside the screen, like fzf: typing never waits for results, the last
+results stay up until new ones arrive, and a spinner turns while a search is under
+way. Matches are underlined in the names. It stays live while open. Results show
+size, a bar in the file type's colour from your colour template, and the date; the
+panel on the right shows details, the biggest things inside a folder and what types
+fill it.
 
 | Keys | Action |
 |---|---|
@@ -679,6 +711,7 @@ src-tauri/              Bulk.exe backend
     commands.rs         list rows, layouts, search, node info, export, open/show
     history.rs          snapshot list, diff, change/duplicate exports
     cart.rs             cleanup cart, delete, undo
+    cleanup.rs          Cleanup tab: suggestions, hidden ones, Recycle Bin and Disk Cleanup
     dupes.rs            duplicate search commands
     settings.rs         settings commands, snapshot storage info
     templates.rs        colour templates folder: shipped files, listing
@@ -691,7 +724,8 @@ src/                    Svelte 5 UI
   lib/app.svelte.ts     app state (drives, scans, selection, cart, toasts…)
   lib/api.ts            typed Tauri commands and binary decoders
   lib/components/       TitleBar, Sidebar, Explorer, TreeList, Treemap, Sunburst,
-                        DiffView, DupesView, TypesView, CommandPalette, CartPanel, dialogs…
+                        DiffView, DupesView, TypesView, CleanupView, CommandPalette,
+                        CartPanel, dialogs…
 ```
 
 ---
