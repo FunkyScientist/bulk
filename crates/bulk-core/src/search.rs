@@ -494,23 +494,48 @@ pub fn search(tree: &Tree, q: &Query, scope: Option<NodeId>, limit: usize) -> (V
             }
         }
     }
-    let ctx = Ctx { tree, under, scope };
-    let n = tree.len();
+    // A small folder: look only at what's in it. A big one is quicker to search
+    // whole, checking each match's ancestors.
+    let small = |s: NodeId| (tree.get(s).files as usize) < tree.len() / 8;
+    let within: Option<Vec<NodeId>> = scope.filter(|&s| s != tree.root && small(s)).map(|s| {
+        let mut ids = Vec::new();
+        let mut stack = vec![s];
+        while let Some(id) = stack.pop() {
+            for c in tree.children_all(id) {
+                ids.push(c);
+                stack.push(c);
+            }
+        }
+        ids
+    });
+    let ctx = Ctx {
+        tree,
+        under,
+        scope: scope.filter(|_| within.is_none()),
+    };
+    let ids: Box<dyn Fn(usize) -> NodeId + Sync> = match &within {
+        Some(v) => Box::new(|i| v[i]),
+        None => Box::new(|i| (i + 1) as NodeId),
+    };
+    let n = within
+        .as_ref()
+        .map_or(tree.len().saturating_sub(1), Vec::len);
 
-    let (mut hits, total) = (1..n)
+    let keep = limit.max(1);
+    let (mut hits, total) = (0..n)
         .into_par_iter()
         .with_min_len(4096)
         .fold(
             || (Vec::new(), 0usize),
             |(mut acc, mut count), i| {
-                let id = i as NodeId;
+                let id = ids(i);
                 if let Some(score) = matches(&ctx, id, q) {
                     count += 1;
                     acc.push(Hit { id, score });
-                    // Keep per-thread lists small: trim to the best `limit` now and then.
-                    if acc.len() >= limit * 4 {
-                        rank(tree, q.sort, &mut acc);
-                        acc.truncate(limit);
+                    // Keep per-thread lists small: cut to the best `limit` now and then,
+                    // without sorting them.
+                    if acc.len() >= keep * 4 {
+                        best(tree, q.sort, &mut acc, keep);
                     }
                 }
                 (acc, count)
@@ -523,6 +548,7 @@ pub fn search(tree: &Tree, q: &Query, scope: Option<NodeId>, limit: usize) -> (V
                 (a, ca + cb)
             },
         );
+    best(tree, q.sort, &mut hits, keep);
     rank(tree, q.sort, &mut hits);
     hits.truncate(limit);
     (hits, total)
@@ -575,10 +601,22 @@ pub fn compare(sort: Sort, a: &Rank, b: &Rank) -> std::cmp::Ordering {
     }
 }
 
+/// Keep the best `n` of `hits`, in no particular order.
+fn best(tree: &Tree, sort: Sort, hits: &mut Vec<Hit>, n: usize) {
+    if hits.len() > n {
+        hits.select_nth_unstable_by(n - 1, |a, b| order(tree, sort, a, b));
+        hits.truncate(n);
+    }
+}
+
 fn rank(tree: &Tree, sort: Sort, hits: &mut [Hit]) {
+    hits.sort_unstable_by(|a, b| order(tree, sort, a, b));
+}
+
+fn order(tree: &Tree, sort: Sort, a: &Hit, b: &Hit) -> std::cmp::Ordering {
     let size = |h: &Hit| tree.get(h.id).alloc;
     let mtime = |h: &Hit| tree.get(h.id).mtime;
-    hits.sort_unstable_by(|a, b| {
+    {
         match sort {
             Sort::Relevance => b.score.cmp(&a.score).then_with(|| size(b).cmp(&size(a))),
             Sort::Size => size(b).cmp(&size(a)),
@@ -589,7 +627,7 @@ fn rank(tree: &Tree, sort: Sort, hits: &mut [Hit]) {
             Sort::Files => tree.get(b.id).files.cmp(&tree.get(a.id).files),
         }
         .then(a.id.cmp(&b.id))
-    });
+    }
 }
 
 fn matches(ctx: &Ctx, id: NodeId, q: &Query) -> Option<u8> {
@@ -774,5 +812,27 @@ mod tests {
         assert_eq!(total, 3);
         assert_eq!(t.name(hits[0].id), "labels_2025_12.pdf");
         assert_eq!(search(&t, &parse("holiday", 0), Some(dl), 10).1, 0);
+    }
+
+    #[test]
+    fn small_and_big_folders_find_the_same() {
+        let mut t = Tree::new("C:");
+        let big = t.add(t.root, "big", flags::DIR, 0, 0, 0, 0);
+        for i in 0..200 {
+            t.add(big, &format!("f{i}.txt"), 0, 1, 1, 0, 0);
+        }
+        let small = t.add(t.root, "small", flags::DIR, 0, 0, 0, 0);
+        let sub = t.add(small, "sub", flags::DIR, 0, 0, 0, 0);
+        t.add(sub, "f1.txt", 0, 1, 1, 0, 0);
+        t.add(small, "other.txt", 0, 1, 1, 0, 0);
+        t.aggregate();
+        let q = parse("f1", 0);
+        // A small folder is searched by walking it; a big one by ancestor checks.
+        let (hits, total) = search(&t, &q, Some(small), 10);
+        assert_eq!(total, 1);
+        assert_eq!(t.path(hits[0].id), r"C:\small\sub\f1.txt");
+        let (_, total) = search(&t, &q, Some(big), 1000);
+        assert_eq!(total, 111, "f1, f10..f19 and f100..f199");
+        assert!(search(&t, &q, Some(big), 3).0.len() == 3);
     }
 }

@@ -279,37 +279,42 @@ fn add(acc: &mut Acc, tree: &Tree, id: NodeId) {
 
 /// Storage per extension and per kind for every file under `root`.
 pub fn breakdown(tree: &Tree, root: NodeId) -> Breakdown {
-    let acc: Acc = if root == tree.root {
-        (1..tree.len())
-            .into_par_iter()
-            .with_min_len(8192)
-            .fold(Acc::new, |mut acc, i| {
-                add(&mut acc, tree, i as NodeId);
-                acc
-            })
-            .reduce(Acc::new, |mut a, b| {
-                for (k, v) in b {
-                    let e = a.entry(k).or_default();
-                    e.0 += v.0;
-                    e.1 += v.1;
-                    e.2 += v.2;
-                }
-                a
-            })
-    } else {
-        let mut acc = Acc::new();
+    // The whole drive is every node; a folder is the files found below it, added up
+    // in parallel either way.
+    let files: Option<Vec<NodeId>> = (root != tree.root).then(|| {
+        let mut files = Vec::new();
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
             for c in tree.children(id) {
                 if tree.get(c).is_dir() {
                     stack.push(c);
                 } else {
-                    add(&mut acc, tree, c);
+                    files.push(c);
                 }
             }
         }
-        acc
-    };
+        files
+    });
+    let n = files
+        .as_ref()
+        .map_or(tree.len().saturating_sub(1), Vec::len);
+    let acc: Acc = (0..n)
+        .into_par_iter()
+        .with_min_len(8192)
+        .fold(Acc::new, |mut acc, i| {
+            let id = files.as_ref().map_or((i + 1) as NodeId, |f| f[i]);
+            add(&mut acc, tree, id);
+            acc
+        })
+        .reduce(Acc::new, |mut a, b| {
+            for (k, v) in b {
+                let e = a.entry(k).or_default();
+                e.0 += v.0;
+                e.1 += v.1;
+                e.2 += v.2;
+            }
+            a
+        });
 
     let mut exts: Vec<ExtStat> = acc
         .into_iter()

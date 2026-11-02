@@ -367,7 +367,7 @@ pub fn junk(a: JunkArgs) -> anyhow::Result<()> {
         let mut t = Table::new(&[true, false]);
         for it in &f.items {
             t.row(vec![
-                format!("{:>9}", out::size_cell(it.alloc)),
+                out::rjust(&out::size_cell(it.alloc), 9),
                 out::path_cell(&it.path, false),
             ]);
         }

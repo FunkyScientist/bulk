@@ -3,17 +3,17 @@
 //! on stdout can be piped.
 
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::time::{Duration, Instant, SystemTime};
 
 use bulk_core::drive::{Fresh, Loaded};
 use bulk_core::helper::{CatchUp, Client};
 use bulk_core::kinds;
 use bulk_core::search::{self, Sort};
-use bulk_core::tree::{NodeId, Tree, flags};
+use bulk_core::tree::{NodeId, flags};
 use bulk_core::usn::{self, FrnIndex};
 use clap::Args;
 use ratatui::Terminal;
@@ -64,11 +64,13 @@ struct Drive {
 }
 
 struct Shared {
-    drives: Mutex<Vec<Drive>>,
+    drives: RwLock<Vec<Drive>>,
     /// Bumped whenever a tree changes or a drive finishes loading.
     generation: AtomicU64,
     status: Status,
     stop: AtomicBool,
+    /// Type breakdowns for the preview, worked out off the screen's thread.
+    types: Mutex<HashMap<(char, NodeId), (Instant, kinds::Breakdown)>>,
 }
 
 impl Shared {
@@ -89,7 +91,7 @@ fn loader(shared: Arc<Shared>, fresh: Freshness, wanted: mpsc::Receiver<char>) {
         match loader.drive(letter) {
             Ok(l) => {
                 let live = l.fresh != Fresh::Snapshot && l.meta.journal.is_some();
-                shared.drives.lock().unwrap().push(Drive {
+                shared.drives.write().unwrap().push(Drive {
                     l,
                     index: None,
                     watched: false,
@@ -112,7 +114,7 @@ fn watch(shared: Arc<Shared>, letter: char) {
     let set_watched = |on: bool| {
         if let Some(d) = shared
             .drives
-            .lock()
+            .write()
             .unwrap()
             .iter_mut()
             .find(|d| d.l.vol.letter == letter)
@@ -124,7 +126,7 @@ fn watch(shared: Arc<Shared>, letter: char) {
     set_watched(true);
     while !shared.stop.load(Ordering::Relaxed) {
         let journal = {
-            let drives = shared.drives.lock().unwrap();
+            let drives = shared.drives.read().unwrap();
             drives
                 .iter()
                 .find(|d| d.l.vol.letter == letter)
@@ -132,7 +134,7 @@ fn watch(shared: Arc<Shared>, letter: char) {
         };
         let Some(j) = journal else { break };
         let r = client.watch(letter, j.id, j.next, |changes, next| {
-            let mut drives = shared.drives.lock().unwrap();
+            let mut drives = shared.drives.write().unwrap();
             if let Some(d) = drives.iter_mut().find(|d| d.l.vol.letter == letter) {
                 if !changes.is_empty() {
                     let tree = &mut d.l.tree;
@@ -206,8 +208,9 @@ struct Ui {
     hist_pos: Option<usize>,
     /// List area from the last draw, for mouse clicks.
     list_area: Rect,
-    /// Type breakdowns for the preview, by row.
-    types: HashMap<(char, NodeId), (u64, kinds::Breakdown)>,
+    /// When the search being worked on was asked for; the old results stay up
+    /// meanwhile, as in fzf.
+    waiting: Option<Instant>,
 }
 
 struct Confirm {
@@ -233,10 +236,11 @@ pub fn find(a: FindArgs) -> anyhow::Result<()> {
     };
 
     let shared = Arc::new(Shared {
-        drives: Mutex::new(Vec::new()),
+        drives: RwLock::new(Vec::new()),
         generation: AtomicU64::new(0),
         status: Arc::new(Mutex::new(format!("Loading {letter}:…"))),
         stop: AtomicBool::new(false),
+        types: Mutex::new(HashMap::new()),
     });
     let (want, wanted) = mpsc::channel();
     let _ = want.send(letter);
@@ -265,7 +269,7 @@ pub fn find(a: FindArgs) -> anyhow::Result<()> {
         history: load_history(),
         hist_pos: None,
         list_area: Rect::default(),
-        types: HashMap::new(),
+        waiting: None,
     };
     let theme = Theme::load();
 
@@ -278,7 +282,7 @@ pub fn find(a: FindArgs) -> anyhow::Result<()> {
         Exit::Quit => Ok(()),
         Exit::Print(rows) => {
             save_history(&ui.history, &ui.input);
-            let drives = shared.drives.lock().unwrap();
+            let drives = shared.drives.read().unwrap();
             let paths: Vec<(String, Option<read::Item>)> = rows
                 .iter()
                 .filter_map(|r| {
@@ -302,7 +306,7 @@ pub fn find(a: FindArgs) -> anyhow::Result<()> {
     }
 }
 
-type Term = Terminal<CrosstermBackend<std::io::Stderr>>;
+type Term = Terminal<CrosstermBackend<BufWriter<std::io::Stderr>>>;
 
 fn setup() -> anyhow::Result<Term> {
     enable_raw_mode()?;
@@ -314,7 +318,9 @@ fn setup() -> anyhow::Result<Term> {
         let _ = execute!(std::io::stderr(), LeaveAlternateScreen, DisableMouseCapture);
         prev(info);
     }));
-    Ok(Terminal::new(CrosstermBackend::new(err))?)
+    Ok(Terminal::new(CrosstermBackend::new(
+        BufWriter::with_capacity(1 << 16, err),
+    ))?)
 }
 
 fn restore_terminal(term: &mut Term) {
@@ -331,66 +337,199 @@ fn drive(drives: &[Drive], letter: char) -> Option<&Drive> {
     drives.iter().find(|d| d.l.vol.letter == letter)
 }
 
+/// A search for the search thread.
+struct Ask {
+    seq: u64,
+    input: String,
+    scope: Scope,
+    sort: usize,
+}
+
+/// What it found.
+struct Found {
+    seq: u64,
+    rows: Vec<Row>,
+    total: usize,
+    took: Duration,
+}
+
+/// Runs searches one after another, skipping any that newer typing made stale.
+fn searcher(shared: Arc<Shared>, asks: mpsc::Receiver<Ask>, found: mpsc::Sender<Found>) {
+    while let Ok(mut ask) = asks.recv() {
+        while let Ok(newer) = asks.try_recv() {
+            ask = newer;
+        }
+        let t0 = Instant::now();
+        let (rows, total) = {
+            let drives = shared.drives.read().unwrap();
+            compute(&drives, &ask.input, &ask.scope, ask.sort)
+        };
+        let done = Found {
+            seq: ask.seq,
+            rows,
+            total,
+            took: t0.elapsed(),
+        };
+        if found.send(done).is_err() {
+            return;
+        }
+    }
+}
+
+/// Works out what kinds of files fill the highlighted folder, for the preview.
+fn typer(shared: Arc<Shared>, asks: mpsc::Receiver<Row>, ready: mpsc::Sender<()>) {
+    while let Ok(mut r) = asks.recv() {
+        while let Ok(newer) = asks.try_recv() {
+            r = newer;
+        }
+        // Kept for a few seconds even while the tree changes, so a live drive
+        // doesn't keep it busy.
+        let fresh = shared
+            .types
+            .lock()
+            .unwrap()
+            .get(&(r.letter, r.id))
+            .is_some_and(|(at, _)| at.elapsed() < Duration::from_secs(5));
+        if fresh {
+            continue;
+        }
+        let b = {
+            let drives = shared.drives.read().unwrap();
+            match drive(&drives, r.letter) {
+                Some(d) if (r.id as usize) < d.l.tree.len() => kinds::breakdown(&d.l.tree, r.id),
+                _ => continue,
+            }
+        };
+        shared
+            .types
+            .lock()
+            .unwrap()
+            .insert((r.letter, r.id), (Instant::now(), b));
+        if ready.send(()).is_err() {
+            return;
+        }
+    }
+}
+
 fn run(
     term: &mut Term,
     ui: &mut Ui,
-    shared: &Shared,
+    shared: &Arc<Shared>,
     want: &mpsc::Sender<char>,
     theme: &Theme,
 ) -> anyhow::Result<Exit> {
-    let mut last_query = String::from("\0");
-    let mut last_scope = ui.scope.clone();
-    let mut last_sort = usize::MAX;
+    let (ask, asks) = mpsc::channel::<Ask>();
+    let (found_tx, found) = mpsc::channel::<Found>();
+    let (type_ask, type_asks) = mpsc::channel::<Row>();
+    let (typed_tx, typed) = mpsc::channel::<()>();
+    {
+        let s = shared.clone();
+        std::thread::spawn(move || searcher(s, asks, found_tx));
+        let s = shared.clone();
+        std::thread::spawn(move || typer(s, type_asks, typed_tx));
+    }
+
+    let mut seq = 0u64;
+    let mut asked = (String::from("\0"), ui.scope.clone(), usize::MAX, u64::MAX);
+    let mut previewed: Option<Row> = None;
+    let mut dirty = true;
+    let mut last_draw = Instant::now();
     loop {
-        // Search again when the query, scope or sort changed, or the trees did.
-        let generation = shared.generation.load(Ordering::Relaxed);
-        if generation != ui.seen
-            || ui.input != last_query
-            || ui.scope != last_scope
-            || ui.sort != last_sort
-        {
-            let drives = shared.drives.lock().unwrap();
-            refresh(ui, &drives);
-            ui.seen = generation;
-            last_query = ui.input.clone();
-            last_scope = ui.scope.clone();
-            last_sort = ui.sort;
+        // Results that came in.
+        while let Ok(f) = found.try_recv() {
+            if f.seq == seq {
+                let drives = shared.drives.read().unwrap();
+                apply(ui, &drives, f.rows, f.total, f.took);
+                ui.waiting = None;
+                dirty = true;
+            }
         }
-        {
-            let drives = shared.drives.lock().unwrap();
-            let status = shared.status.lock().unwrap().clone();
-            term.draw(|f| draw(f, ui, &drives, theme, &status))?;
+        while typed.try_recv().is_ok() {
+            dirty = true;
         }
 
-        if !event::poll(Duration::from_millis(120))? {
+        // Search again when the query, scope or sort changed, or the trees did.
+        // Browsing a folder is instant, so it's done right here.
+        let generation = shared.generation.load(Ordering::Relaxed);
+        let now = (ui.input.clone(), ui.scope.clone(), ui.sort, generation);
+        if now != asked {
+            if ui.input.trim().is_empty() {
+                let drives = shared.drives.read().unwrap();
+                refresh(ui, &drives);
+                ui.waiting = None;
+            } else {
+                seq += 1;
+                let _ = ask.send(Ask {
+                    seq,
+                    input: ui.input.clone(),
+                    scope: ui.scope.clone(),
+                    sort: ui.sort,
+                });
+                ui.waiting.get_or_insert_with(Instant::now);
+            }
+            ui.seen = generation;
+            asked = now;
+            dirty = true;
+        }
+
+        // The preview's type breakdown, for a highlighted folder.
+        let current = ui.rows.get(ui.sel).copied();
+        if current != previewed {
+            previewed = current;
+            if let Some(r) = current {
+                let _ = type_ask.send(r);
+            }
+        }
+
+        // Draw when something changed, and keep the spinner turning while busy.
+        let busy = ui.waiting.is_some() || !shared.status.lock().unwrap().is_empty();
+        if dirty || (busy && last_draw.elapsed() >= Duration::from_millis(80)) {
+            let drives = shared.drives.read().unwrap();
+            let status = shared.status.lock().unwrap().clone();
+            let types = shared.types.lock().unwrap();
+            term.draw(|f| draw(f, ui, &drives, theme, &status, &types))?;
+            dirty = false;
+            last_draw = Instant::now();
+        }
+
+        let wait = if busy { 40 } else { 250 };
+        if !event::poll(Duration::from_millis(wait))? {
             continue;
         }
-        match event::read()? {
-            Event::Key(k) if k.kind != KeyEventKind::Release => {
-                if let Some(exit) = key(ui, k, shared, want)? {
-                    return Ok(exit);
-                }
-            }
-            Event::Mouse(m) => match m.kind {
-                MouseEventKind::ScrollDown => move_sel(ui, 3),
-                MouseEventKind::ScrollUp => move_sel(ui, -3),
-                MouseEventKind::Down(MouseButton::Left) => {
-                    let a = ui.list_area;
-                    if m.column >= a.x
-                        && m.column < a.x + a.width
-                        && m.row >= a.y
-                        && m.row < a.y + a.height
-                    {
-                        let i = ui.offset + (m.row - a.y) as usize;
-                        if i < ui.rows.len() {
-                            ui.sel = i;
-                        }
+        // Take every key that's waiting before drawing again, so fast typing
+        // never queues up frames.
+        loop {
+            match event::read()? {
+                Event::Key(k) if k.kind != KeyEventKind::Release => {
+                    if let Some(exit) = key(ui, k, shared, want)? {
+                        return Ok(exit);
                     }
                 }
+                Event::Mouse(m) => match m.kind {
+                    MouseEventKind::ScrollDown => move_sel(ui, 3),
+                    MouseEventKind::ScrollUp => move_sel(ui, -3),
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        let a = ui.list_area;
+                        if m.column >= a.x
+                            && m.column < a.x + a.width
+                            && m.row >= a.y
+                            && m.row < a.y + a.height
+                        {
+                            let i = ui.offset + (m.row - a.y) as usize;
+                            if i < ui.rows.len() {
+                                ui.sel = i;
+                            }
+                        }
+                    }
+                    _ => {}
+                },
                 _ => {}
-            },
-            _ => {}
+            }
+            if !event::poll(Duration::ZERO)? {
+                break;
+            }
         }
+        dirty = true;
     }
 }
 
@@ -403,20 +542,25 @@ fn scope_node(drives: &[Drive], scope: &Scope) -> Option<(char, NodeId)> {
     }
 }
 
+/// Search (or browse) now, and show the result.
 fn refresh(ui: &mut Ui, drives: &[Drive]) {
-    let keep = ui.rows.get(ui.sel).copied();
     let t0 = Instant::now();
-    let sort = SORTS[ui.sort].0;
-    let text = ui.input.trim();
+    let (rows, total) = compute(drives, &ui.input, &ui.scope, ui.sort);
+    apply(ui, drives, rows, total, t0.elapsed());
+}
 
-    let (rows, total) = if text.is_empty() {
-        browse_rows(drives, &ui.scope, sort)
+/// What a search finds, or a folder's contents when the search is empty.
+fn compute(drives: &[Drive], input: &str, scope: &Scope, sort: usize) -> (Vec<Row>, usize) {
+    let sort = SORTS[sort].0;
+    let text = input.trim();
+    if text.is_empty() {
+        browse_rows(drives, scope, sort)
     } else {
         let mut q = search::parse(text, bulk_core::os::now());
         if !text.contains("sort:") {
             q.sort = sort;
         }
-        let scope = scope_node(drives, &ui.scope);
+        let scope = scope_node(drives, scope);
         let mut hits: Vec<(u8, Row)> = Vec::new();
         let mut total = 0;
         for d in drives {
@@ -445,11 +589,15 @@ fn refresh(ui: &mut Ui, drives: &[Drive]) {
         hits.sort_by(|a, b| search::compare(q.sort, &rank(a), &rank(b)));
         hits.truncate(LIMIT);
         (hits.into_iter().map(|(_, r)| r).collect(), total)
-    };
+    }
+}
+
+/// Show search results, staying on the same item when it's still there.
+fn apply(ui: &mut Ui, drives: &[Drive], rows: Vec<Row>, total: usize, took: Duration) {
+    let keep = ui.rows.get(ui.sel).copied();
     ui.rows = rows;
     ui.total = total;
-    ui.took = t0.elapsed();
-    // Stay on the same item when it's still there.
+    ui.took = took;
     ui.sel = keep
         .and_then(|k| ui.rows.iter().position(|r| *r == k))
         .unwrap_or(0);
@@ -600,7 +748,7 @@ fn key(
 
         // Actions.
         KeyCode::Char('o') if ctrl => {
-            let drives = shared.drives.lock().unwrap();
+            let drives = shared.drives.read().unwrap();
             if let Some(p) = paths(ui, &drives).first() {
                 let r = bulk_core::os::open(p);
                 drop(drives);
@@ -611,13 +759,13 @@ fn key(
             }
         }
         KeyCode::Char('e') if ctrl => {
-            let p = paths(ui, &shared.drives.lock().unwrap()).into_iter().next();
+            let p = paths(ui, &shared.drives.read().unwrap()).into_iter().next();
             if let Some(p) = p {
                 let _ = bulk_core::os::reveal(&p);
             }
         }
         KeyCode::Char('b') if ctrl => {
-            let p = paths(ui, &shared.drives.lock().unwrap()).into_iter().next();
+            let p = paths(ui, &shared.drives.read().unwrap()).into_iter().next();
             if let Some(p) = p {
                 match bulk_core::os::open_in_app(&p) {
                     Ok(()) => say(ui, "Opening in Bulk", false),
@@ -626,7 +774,7 @@ fn key(
             }
         }
         KeyCode::Char('c') if alt => {
-            let p = paths(ui, &shared.drives.lock().unwrap());
+            let p = paths(ui, &shared.drives.read().unwrap());
             if !p.is_empty() {
                 match copy(&p.join("\r\n")) {
                     Ok(()) => say(
@@ -643,7 +791,7 @@ fn key(
             }
         }
         KeyCode::Char('d') if ctrl => {
-            let drives = shared.drives.lock().unwrap();
+            let drives = shared.drives.read().unwrap();
             ui.confirm = confirm(ui, &drives);
         }
         KeyCode::Char('r') if ctrl => {
@@ -666,7 +814,7 @@ fn key(
 
         // Folders: into one with → at the end of the search, up with ← at its start.
         KeyCode::Right if ui.cur == len => {
-            let drives = shared.drives.lock().unwrap();
+            let drives = shared.drives.read().unwrap();
             if let Some(&r) = ui.rows.get(ui.sel)
                 && let Some(d) = drive(&drives, r.letter)
                 && d.l.tree.get(r.id).is_dir()
@@ -706,7 +854,7 @@ fn key(
                     }
                 }
                 // Land on the folder we came out of.
-                let drives = shared.drives.lock().unwrap();
+                let drives = shared.drives.read().unwrap();
                 refresh(ui, &drives);
                 if let Some((l, p)) = came_from
                     && let Some(id) = drive(&drives, l).and_then(|d| d.l.tree.find_path(&p))
@@ -800,7 +948,7 @@ fn recycle(ui: &mut Ui, shared: &Shared, rows: Vec<(Row, Target)>) {
     for (r, t) in rows {
         match bulk_core::trash::recycle(Path::new(&t.path)) {
             Ok(()) => {
-                let mut drives = shared.drives.lock().unwrap();
+                let mut drives = shared.drives.write().unwrap();
                 if let Some(d) = drives.iter_mut().find(|d| d.l.vol.letter == r.letter) {
                     d.l.tree.mark_gone(r.id);
                 }
@@ -916,13 +1064,7 @@ fn copy(text: &str) -> anyhow::Result<()> {
 
 // --- Drawing --------------------------------------------------------------------
 
-fn kind_key(tree: &Tree, id: NodeId) -> &'static str {
-    if tree.get(id).is_dir() {
-        "folder"
-    } else {
-        kinds::kind_key(kinds::kind_of(tree.name_lower(id)))
-    }
-}
+use read::kind_key;
 
 fn scope_label(scope: &Scope) -> String {
     match scope {
@@ -954,7 +1096,63 @@ fn fit_right(s: &str, w: usize) -> String {
     format!("{head}…")
 }
 
-fn draw(f: &mut ratatui::Frame, ui: &mut Ui, drives: &[Drive], t: &Theme, status: &str) {
+type Types = HashMap<(char, NodeId), (Instant, kinds::Breakdown)>;
+
+/// The plain words of a search (no filters), lower case, to highlight in names.
+fn words(input: &str) -> Vec<String> {
+    input
+        .split_whitespace()
+        .filter(|t| !t.contains(':') && !t.starts_with(['-', '!']) && *t != "OR")
+        .flat_map(|t| t.split(['|', '/', '\\', '*', '?', '"']))
+        .filter(|w| !w.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect()
+}
+
+/// `text` in `base`, with every place a search word matches in `hit`.
+fn highlight<'a>(text: String, words: &[String], base: Style, hit: Style) -> Vec<Span<'a>> {
+    if words.is_empty() {
+        return vec![Span::styled(text, base)];
+    }
+    let lower = text.to_ascii_lowercase();
+    let mut on = vec![false; text.len()];
+    for w in words {
+        let mut from = 0;
+        while let Some(i) = lower[from..].find(w.as_str()) {
+            let at = from + i;
+            on[at..at + w.len()].iter_mut().for_each(|b| *b = true);
+            from = at + w.len().max(1);
+        }
+    }
+    let mut spans = Vec::new();
+    let mut start = 0;
+    for (i, _) in text.char_indices().skip(1).chain([(text.len(), ' ')]) {
+        if i == text.len() || on[i] != on[start] {
+            let style = if on[start] { hit } else { base };
+            spans.push(Span::styled(text[start..i].to_string(), style));
+            start = i;
+        }
+    }
+    spans
+}
+
+const SPINNER: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
+
+fn spinner() -> &'static str {
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    SPINNER[(ms / 80) as usize % SPINNER.len()]
+}
+
+fn draw(
+    f: &mut ratatui::Frame,
+    ui: &mut Ui,
+    drives: &[Drive],
+    t: &Theme,
+    status: &str,
+    types: &Types,
+) {
     let area = f.area();
     let [top, main, foot, keys] = Layout::vertical([
         Constraint::Length(2),
@@ -1038,6 +1236,7 @@ fn draw(f: &mut ratatui::Frame, ui: &mut Ui, drives: &[Drive], t: &Theme, status
 
     let browsing = ui.input.trim().is_empty();
     let base = scope_node(drives, &ui.scope);
+    let words = words(&ui.input);
     let biggest = ui
         .rows
         .iter()
@@ -1070,32 +1269,36 @@ fn draw(f: &mut ratatui::Frame, ui: &mut Ui, drives: &[Drive], t: &Theme, status
             s
         };
         let width = list.width as usize;
-        let fixed = 2 + 10 + 7 + 11;
+        let fixed = 3 + 10 + 7 + 11;
         let frac = n.alloc as f64 / biggest as f64;
+        let here = i == ui.sel;
         let mut row_style = Style::new();
-        if i == ui.sel {
-            row_style = row_style
-                .bg(Color::Rgb(45, 45, 58))
-                .add_modifier(Modifier::BOLD);
+        if here {
+            row_style = row_style.bg(Color::Rgb(40, 40, 52));
         }
-        lines.push(
-            Line::from(vec![
-                Span::styled(if picked { "● " } else { "  " }, accent),
-                Span::raw(format!("{:>9} ", out::size(n.alloc))),
-                Span::styled(out::bar(frac, 6), Style::new().fg(colour)),
-                Span::raw(" "),
-                Span::styled(format!("{:<10} ", out::date(n.mtime)), subtle),
-                Span::styled(
-                    fit_left(&name, width.saturating_sub(fixed)),
-                    if n.is_dir() {
-                        Style::new().fg(t.file("folder"))
-                    } else {
-                        Style::new()
-                    },
-                ),
-            ])
-            .style(row_style),
-        );
+        let name_style = match (n.is_dir(), here) {
+            (true, _) => Style::new().fg(t.file("folder")),
+            (false, true) => Style::new().add_modifier(Modifier::BOLD),
+            (false, false) => Style::new(),
+        };
+        let mut spans = vec![
+            Span::styled(if here { "▌" } else { " " }, accent),
+            Span::styled(if picked { "●" } else { " " }, accent),
+            Span::raw(" "),
+            Span::raw(format!("{:>9} ", out::size(n.alloc))),
+            Span::styled(out::bar(frac, 6), Style::new().fg(colour)),
+            Span::raw(" "),
+            Span::styled(format!("{:<10} ", out::date(n.mtime)), subtle),
+        ];
+        spans.extend(highlight(
+            fit_left(&name, width.saturating_sub(fixed)),
+            &words,
+            name_style,
+            Style::new()
+                .fg(t.accent)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        ));
+        lines.push(Line::from(spans).style(row_style));
     }
     if ui.rows.is_empty() {
         let msg = if drives.is_empty() || !status.is_empty() {
@@ -1110,11 +1313,11 @@ fn draw(f: &mut ratatui::Frame, ui: &mut Ui, drives: &[Drive], t: &Theme, status
     f.render_widget(Paragraph::new(lines), list);
 
     if let Some(p) = preview {
-        draw_preview(f, ui, drives, t, p);
+        draw_preview(f, ui, drives, t, p, types);
     }
 
     // Counts, picks and messages.
-    let mut left = if browsing {
+    let left = if browsing {
         match base {
             Some((l, id)) => {
                 let n = drive(drives, l).unwrap().l.tree.get(id);
@@ -1128,13 +1331,21 @@ fn draw(f: &mut ratatui::Frame, ui: &mut Ui, drives: &[Drive], t: &Theme, status
             None => format!(" {} drives", ui.rows.len()),
         }
     } else {
+        let scanned: usize = drives.iter().map(|d| d.l.tree.len()).sum();
         format!(
-            " {} match{} · {} ms",
+            " {}/{} · {} ms",
             out::count(ui.total as u64),
-            if ui.total == 1 { "" } else { "es" },
+            out::count(scanned as u64),
             ui.took.as_millis()
         )
     };
+    // Turning while a search is under way (after a moment, so quick ones don't
+    // flicker) or a drive is loading.
+    let busy = ui
+        .waiting
+        .is_some_and(|at| at.elapsed() > Duration::from_millis(60))
+        || !status.is_empty();
+    let mut left = format!(" {}{left}", if busy { spinner() } else { " " });
     left.push_str(&format!(" · sort: {}", SORTS[ui.sort].1));
     let mut spans = vec![Span::styled(left, muted)];
     if !ui.picked.is_empty() {
@@ -1193,7 +1404,14 @@ fn draw(f: &mut ratatui::Frame, ui: &mut Ui, drives: &[Drive], t: &Theme, status
     }
 }
 
-fn draw_preview(f: &mut ratatui::Frame, ui: &mut Ui, drives: &[Drive], t: &Theme, area: Rect) {
+fn draw_preview(
+    f: &mut ratatui::Frame,
+    ui: &Ui,
+    drives: &[Drive],
+    t: &Theme,
+    area: Rect,
+    types: &Types,
+) {
     let block = Block::new()
         .borders(Borders::LEFT)
         .border_style(Style::new().fg(t.subtle));
@@ -1283,17 +1501,14 @@ fn draw_preview(f: &mut ratatui::Frame, ui: &mut Ui, drives: &[Drive], t: &Theme
             ]));
         }
 
-        // What kinds of files fill it; cached until the tree changes.
-        let key = (r.letter, r.id);
-        let generation = ui.seen;
-        let fresh = ui.types.get(&key).is_some_and(|(g, _)| *g == generation);
-        if !fresh {
-            ui.types
-                .insert(key, (generation, kinds::breakdown(tree, r.id)));
-        }
-        let b = &ui.types[&key].1;
+        // What kinds of files fill it, worked out on another thread.
         lines.push(Line::raw(""));
         lines.push(Line::styled(" By type", muted.add_modifier(Modifier::BOLD)));
+        let Some((_, b)) = types.get(&(r.letter, r.id)) else {
+            lines.push(Line::styled(format!(" {} adding up…", spinner()), subtle));
+            f.render_widget(Paragraph::new(lines), inner);
+            return;
+        };
         for k in b.kinds.iter().take(5) {
             let frac = k.alloc as f64 / b.alloc.max(1) as f64;
             lines.push(Line::from(vec![

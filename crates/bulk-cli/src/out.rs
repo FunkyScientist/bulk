@@ -210,6 +210,12 @@ impl Table {
     }
 }
 
+/// `s` padded on the left to `w` columns, not counting colour codes.
+pub fn rjust(s: &str, w: usize) -> String {
+    let n = visible(s).chars().count();
+    format!("{}{s}", " ".repeat(w.saturating_sub(n)))
+}
+
 /// `s` without ANSI colour codes, for measuring.
 fn visible(s: &str) -> String {
     let mut out = String::new();

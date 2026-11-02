@@ -1,5 +1,6 @@
 use super::*;
 use bulk_core::snapshot::Meta;
+use bulk_core::tree::Tree;
 use bulk_core::volume::{DriveKind, Volume};
 use ratatui::backend::TestBackend;
 
@@ -36,7 +37,7 @@ fn shared() -> Arc<Shared> {
         journal: None,
     };
     Arc::new(Shared {
-        drives: Mutex::new(vec![Drive {
+        drives: RwLock::new(vec![Drive {
             l: Loaded {
                 vol,
                 meta,
@@ -50,6 +51,7 @@ fn shared() -> Arc<Shared> {
         generation: AtomicU64::new(0),
         status: Arc::new(Mutex::new(String::new())),
         stop: AtomicBool::new(false),
+        types: Mutex::new(HashMap::new()),
     })
 }
 
@@ -73,19 +75,19 @@ fn ui(scope: Scope) -> Ui {
         history: Vec::new(),
         hist_pos: None,
         list_area: Rect::new(0, 2, 80, 20),
-        types: HashMap::new(),
+        waiting: None,
     }
 }
 
 fn press(ui: &mut Ui, s: &Shared, code: KeyCode, mods: KeyModifiers) -> Option<Exit> {
     let (tx, _rx) = mpsc::channel();
     let r = key(ui, KeyEvent::new(code, mods), s, &tx).unwrap();
-    refresh(ui, &s.drives.lock().unwrap());
+    refresh(ui, &s.drives.read().unwrap());
     r
 }
 
 fn names(ui: &Ui, s: &Shared) -> Vec<String> {
-    let d = s.drives.lock().unwrap();
+    let d = s.drives.read().unwrap();
     ui.rows
         .iter()
         .map(|r| d[0].l.tree.name(r.id).to_string())
@@ -94,8 +96,10 @@ fn names(ui: &Ui, s: &Shared) -> Vec<String> {
 
 fn screen(ui: &mut Ui, s: &Shared) -> String {
     let mut term = Terminal::new(TestBackend::new(130, 24)).unwrap();
-    let d = s.drives.lock().unwrap();
-    term.draw(|f| draw(f, ui, &d, &Theme::load(), "")).unwrap();
+    let d = s.drives.read().unwrap();
+    let types = s.types.lock().unwrap();
+    term.draw(|f| draw(f, ui, &d, &Theme::load(), "", &types))
+        .unwrap();
     let buf = term.backend().buffer().clone();
     (0..buf.area.height)
         .map(|y| {
@@ -111,7 +115,7 @@ fn screen(ui: &mut Ui, s: &Shared) -> String {
 fn browse_into_and_out_of_folders() {
     let s = shared();
     let mut u = ui(Scope::Folder('Q', "Q:\\a".into()));
-    refresh(&mut u, &s.drives.lock().unwrap());
+    refresh(&mut u, &s.drives.read().unwrap());
     assert_eq!(names(&u, &s), ["big.mp4", "small.txt", "sub"]);
 
     u.sel = 2;
@@ -157,7 +161,7 @@ fn search_pick_and_print() {
     let Some(Exit::Print(rows)) = press(&mut u, &s, KeyCode::Enter, KeyModifiers::NONE) else {
         panic!("Enter should print");
     };
-    let d = s.drives.lock().unwrap();
+    let d = s.drives.read().unwrap();
     assert_eq!(d[0].l.tree.path(rows[0].id), "Q:\\a\\sub\\deep.log");
 }
 
@@ -166,7 +170,7 @@ fn scope_sort_and_escape() {
     let s = shared();
     let mut u = ui(Scope::Folder('Q', "Q:\\a".into()));
     set_input(&mut u, "zip".into());
-    refresh(&mut u, &s.drives.lock().unwrap());
+    refresh(&mut u, &s.drives.read().unwrap());
     assert!(u.rows.is_empty(), "b.zip is outside Q:\\a");
     press(&mut u, &s, KeyCode::Char('r'), KeyModifiers::CONTROL);
     assert_eq!(names(&u, &s), ["b.zip"]);
@@ -188,7 +192,7 @@ fn scope_sort_and_escape() {
 fn delete_asks_first() {
     let s = shared();
     let mut u = ui(Scope::Folder('Q', "Q:\\a".into()));
-    refresh(&mut u, &s.drives.lock().unwrap());
+    refresh(&mut u, &s.drives.read().unwrap());
     press(&mut u, &s, KeyCode::Tab, KeyModifiers::NONE);
     press(&mut u, &s, KeyCode::Char('d'), KeyModifiers::CONTROL);
     let c = u.confirm.as_ref().expect("asks before deleting");
@@ -204,11 +208,56 @@ fn delete_asks_first() {
 fn draws_rows_preview_and_help() {
     let s = shared();
     let mut u = ui(Scope::Folder('Q', "Q:\\a".into()));
-    refresh(&mut u, &s.drives.lock().unwrap());
+    refresh(&mut u, &s.drives.read().unwrap());
     let text = screen(&mut u, &s);
     assert!(text.contains("big.mp4"), "{text}");
     assert!(text.contains("On disk"), "{text}");
     assert!(text.contains("3 items"), "{text}");
     u.help = true;
     assert!(screen(&mut u, &s).contains("pick or unpick"));
+}
+
+#[test]
+fn highlights_search_words() {
+    assert_eq!(
+        words("tax 2024 ext:pdf -old !x a|b"),
+        ["tax", "2024", "a", "b"]
+    );
+    let spans = highlight(
+        "My Tax Return".into(),
+        &words("tax"),
+        Style::new(),
+        Style::new().bold(),
+    );
+    let text: Vec<&str> = spans.iter().map(|s| s.content.as_ref()).collect();
+    assert_eq!(text, ["My ", "Tax", " Return"]);
+    // Names that aren't plain ASCII don't trip it up.
+    let spans = highlight("café tax".into(), &words("tax"), Style::new(), Style::new());
+    assert_eq!(spans.len(), 2);
+}
+
+#[test]
+fn searches_run_off_the_screen_thread() {
+    let s = shared();
+    let (ask, asks) = mpsc::channel();
+    let (found_tx, found) = mpsc::channel();
+    let s2 = s.clone();
+    std::thread::spawn(move || searcher(s2, asks, found_tx));
+    for (seq, q) in [(1, "b"), (2, "bi"), (3, "big")] {
+        ask.send(Ask {
+            seq,
+            input: q.into(),
+            scope: Scope::Drive('Q'),
+            sort: 0,
+        })
+        .unwrap();
+    }
+    // The newest search always comes back; older ones may be skipped.
+    let last = loop {
+        let f = found.recv_timeout(Duration::from_secs(5)).unwrap();
+        if f.seq == 3 {
+            break f;
+        }
+    };
+    assert_eq!(last.total, 1);
 }

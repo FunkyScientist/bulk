@@ -256,7 +256,7 @@ pub fn top(a: TopArgs) -> anyhow::Result<()> {
         };
         let n = tree.get(id);
         let name = if a.files || a.folders {
-            out::path_cell(&rel(tree, root, id).trim_end_matches('\\'), n.is_dir())
+            out::path_cell(rel(tree, root, id).trim_end_matches('\\'), n.is_dir())
         } else {
             out::path_cell(tree.name(id), n.is_dir())
         };
