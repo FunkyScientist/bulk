@@ -18,31 +18,44 @@ pub struct Theme {
     files: HashMap<String, Color>,
 }
 
-impl Theme {
-    pub fn load() -> Theme {
-        let id = bulk_core::settings::load().template;
-        let dir = bulk_core::snapshot::root().with_file_name("templates");
-        let chosen: Option<Value> = std::fs::read_to_string(dir.join(format!("{id}.json")))
-            .ok()
-            .and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok());
-        let base: Value = serde_json::from_str(DEFAULT).unwrap_or(Value::Null);
-
-        // The template's values over the default's, as the app does.
-        let section = |key: &str| {
-            let mut m: HashMap<String, String> = HashMap::new();
-            for t in [Some(&base), chosen.as_ref()].into_iter().flatten() {
-                if let Some(o) = t["dark"][key].as_object() {
-                    for (k, v) in o {
-                        if let Some(s) = v.as_str() {
-                            m.insert(k.clone(), s.to_string());
-                        }
-                    }
+/// One mode's `ui` or `files` colours from the template picked in the app, over
+/// the default template's, as the app does.
+fn section(mode: &str, key: &str) -> HashMap<String, String> {
+    let id = bulk_core::settings::load().template;
+    let dir = bulk_core::snapshot::root().with_file_name("templates");
+    let chosen: Option<Value> = std::fs::read_to_string(dir.join(format!("{id}.json")))
+        .ok()
+        .and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok());
+    let base: Value = serde_json::from_str(DEFAULT).unwrap_or(Value::Null);
+    let mut m = HashMap::new();
+    for t in [Some(&base), chosen.as_ref()].into_iter().flatten() {
+        if let Some(o) = t[mode][key].as_object() {
+            for (k, v) in o {
+                if let Some(s) = v.as_str() {
+                    m.insert(k.clone(), s.to_string());
                 }
             }
-            m
-        };
-        let ui = section("ui");
-        let files = section("files");
+        }
+    }
+    m
+}
+
+/// The template for HTML reports, so they look like the app.
+pub fn report() -> bulk_core::export::Theme {
+    let mode = |m: &str| bulk_core::export::ThemeMode {
+        ui: section(m, "ui").into_iter().collect(),
+        files: section(m, "files").into_iter().collect(),
+    };
+    bulk_core::export::Theme {
+        light: mode("light"),
+        dark: mode("dark"),
+    }
+}
+
+impl Theme {
+    pub fn load() -> Theme {
+        let ui = section("dark", "ui");
+        let files = section("dark", "files");
         let colour = |k: &str, fallback: Color| {
             resolve(&ui, ui.get(k).map(String::as_str).unwrap_or(""), 0).unwrap_or(fallback)
         };

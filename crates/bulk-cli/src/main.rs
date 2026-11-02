@@ -6,6 +6,7 @@ mod find;
 mod load;
 mod out;
 mod read;
+mod report;
 mod theme;
 
 use std::path::PathBuf;
@@ -69,6 +70,16 @@ enum Cmd {
     Search(read::SearchArgs),
     /// Space used by each kind of file, or each extension
     Types(read::TypesArgs),
+    /// What grew, shrank, appeared or went since an earlier snapshot
+    Changes(report::ChangesArgs),
+    /// List a drive's dated snapshots
+    Snapshots(report::SnapshotsArgs),
+    /// Space that can usually be got back: build output, caches, old downloads
+    Junk(report::JunkArgs),
+    /// Find files with the same contents
+    Dupes(report::DupesArgs),
+    /// Write an HTML, CSV or JSON report
+    Export(report::ExportArgs),
     /// Search and browse interactively (what `bulk` on its own does)
     #[command(after_long_help = QUERY_HELP)]
     Find(find::FindArgs),
@@ -99,6 +110,11 @@ fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Search(a) => read::search(a),
         Cmd::Types(a) => read::types(a),
         Cmd::Find(a) => find::find(a),
+        Cmd::Changes(a) => report::changes(a),
+        Cmd::Snapshots(a) => report::snapshots(a),
+        Cmd::Junk(a) => report::junk(a),
+        Cmd::Dupes(a) => report::dupes(a),
+        Cmd::Export(a) => report::export(a),
         Cmd::Delete(a) => delete::delete(a),
         Cmd::Restore(a) => delete::restore(a),
     }

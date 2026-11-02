@@ -7,6 +7,7 @@ pub mod dupes;
 pub mod export;
 pub mod filter;
 pub mod helper;
+pub mod junk;
 pub mod kinds;
 pub mod layout;
 pub mod os;
