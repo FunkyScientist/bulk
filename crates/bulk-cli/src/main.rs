@@ -1,6 +1,7 @@
 //! `bulk`: Bulk from the command line. Reads the same snapshots as the app, keeps
 //! them current through the elevated helper, and can open folders in the app.
 
+mod delete;
 mod load;
 mod out;
 mod read;
@@ -66,6 +67,10 @@ enum Cmd {
     Search(read::SearchArgs),
     /// Space used by each kind of file, or each extension
     Types(read::TypesArgs),
+    /// Move files or folders to the Recycle Bin (lists them first; add --yes)
+    Delete(delete::DeleteArgs),
+    /// Put back what `bulk delete` recycled, or list recent deletes
+    Restore(delete::RestoreArgs),
 }
 
 fn main() {
@@ -88,6 +93,8 @@ fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Top(a) => read::top(a),
         Cmd::Search(a) => read::search(a),
         Cmd::Types(a) => read::types(a),
+        Cmd::Delete(a) => delete::delete(a),
+        Cmd::Restore(a) => delete::restore(a),
     }
 }
 
