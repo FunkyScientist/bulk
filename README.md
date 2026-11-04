@@ -16,6 +16,12 @@ It's built with Rust (scanning, data, layouts) and Svelte 5 inside Tauri 2 (the 
 - [Building the installer](#building-the-installer)
 - [Security model](#security-model)
 - [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+
+> **Bulk can delete files.** Recycling is the default, but permanent deletes can't be
+> undone. Check what's in the cart before you empty it. Bulk is provided as is, with no
+> warranty (see [License](#license)).
 
 ---
 
@@ -845,3 +851,15 @@ The installer:
 | Changes tab says a snapshot came from a standard scan | That snapshot was a folder walk, which can't see protected folders, so some differences are just what it couldn't see. Pick one taken with fast mode. |
 | Lots of grey "Deleted" items | They're cleared by rescanning the folder (Ctrl+R). |
 | Snapshot folder looks empty in Explorer | You're running a dev build from inside a packaged app; use Settings → Open folder. |
+
+---
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
+To report a security problem privately, see [SECURITY.md](SECURITY.md).
+
+## License
+
+Bulk is released under the [MIT License](LICENSE). You can use, change and share it
+freely, including in commercial projects, as long as you keep the copyright notice.
