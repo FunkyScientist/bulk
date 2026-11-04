@@ -92,7 +92,10 @@
     {disabled}
     onclick={() => onchange(!on)}
   >
-    <span class="knob absolute top-0.5 left-0.5 size-4 rounded-full bg-[var(--switch-knob)]" class:on></span>
+    <span
+      class="knob absolute top-0.5 left-0.5 size-4 rounded-full bg-[var(--switch-knob)]"
+      class:on
+    ></span>
   </button>
 {/snippet}
 

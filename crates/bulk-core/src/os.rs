@@ -45,7 +45,7 @@ pub fn reveal(path: &str) -> anyhow::Result<()> {
 }
 
 /// The app's Tauri identifier; its single-instance lock is named after it.
-const APP_ID: &str = "app.bulk.desktop";
+const APP_ID: &str = "io.github.funkyscientist.bulk";
 
 /// Whether the Bulk app is open (in this Windows session).
 pub fn app_running() -> bool {

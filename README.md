@@ -27,24 +27,24 @@ It's built with Rust (scanning, data, layouts) and Svelte 5 inside Tauri 2 (the 
 
 ## What it does
 
-| | |
-|---|---|
-| **Fast scans** | Reads the MFT through a small elevated helper: C: with ~1.5M files in about 5 s. Without it, a parallel folder walk (slower, can't see protected folders). |
-| **Instant reopen** | The last snapshot of each drive loads at startup, then the change journal catches it up. No rescan needed. |
-| **Live view** | New files show up as they're created, deleted ones stay greyed out until the next rescan. |
-| **Tree list + charts** | A virtualized file list next to a treemap or sunburst, kept in sync. Zoom into any folder. |
-| **Rescan a folder** | Rescans just the folder you're looking at, and merges it into the drive's data. Whole-drive rescan is one click away. |
-| **What changed** | Compare against any earlier snapshot, scoped to the folder you're in. |
-| **Search everywhere** | Ctrl+K searches every scanned drive in milliseconds: wildcards (`IMG_2024*.jpg`), paths (`Downloads/invoice`), filters like `kind:video size:>1GB modified:<30d`, exclusions and OR. Select results and send them to the cleanup cart. |
-| **Filter the view** | Limit the list, treemap and sunburst to any search (`kind:video`, `size:>1GB`, …); folder sizes count only what matches. |
-| **Storage by type** | How much space videos, spreadsheets, archives… take, or every extension on its own, for the drive or the folder you're in. |
-| **Cleanup suggestions** | Build output, caches, old temp files and downloads you can usually delete, marked safe or check-first, ready to send to the cart. |
-| **Cleanup cart** | Collect files and folders from anywhere, review, then send them to the Recycle Bin (with undo) or delete permanently. |
-| **Duplicate finder** | Finds identical files by content, not name. |
-| **Exports** | A shareable HTML report, CSV or JSON for the current folder, the changes, or the duplicates. |
-| **Explorer integration** | "Analyze with Bulk" on any folder or drive's right-click menu. |
-| **Command line** | `bulk .` opens a folder in the app; `bulk` on its own is an interactive finder; `bulk top`, `search`, `junk`, `changes`, `delete`… print tables or JSON for scripts and AI agents. |
-| **Scheduled snapshots** | Optional daily or weekly snapshots in the background, even when Bulk is closed. |
+|                          |                                                                                                                                                                                                                                        |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Fast scans**           | Reads the MFT through a small elevated helper: C: with ~1.5M files in about 5 s. Without it, a parallel folder walk (slower, can't see protected folders).                                                                             |
+| **Instant reopen**       | The last snapshot of each drive loads at startup, then the change journal catches it up. No rescan needed.                                                                                                                             |
+| **Live view**            | New files show up as they're created, deleted ones stay greyed out until the next rescan.                                                                                                                                              |
+| **Tree list + charts**   | A virtualized file list next to a treemap or sunburst, kept in sync. Zoom into any folder.                                                                                                                                             |
+| **Rescan a folder**      | Rescans just the folder you're looking at, and merges it into the drive's data. Whole-drive rescan is one click away.                                                                                                                  |
+| **What changed**         | Compare against any earlier snapshot, scoped to the folder you're in.                                                                                                                                                                  |
+| **Search everywhere**    | Ctrl+K searches every scanned drive in milliseconds: wildcards (`IMG_2024*.jpg`), paths (`Downloads/invoice`), filters like `kind:video size:>1GB modified:<30d`, exclusions and OR. Select results and send them to the cleanup cart. |
+| **Filter the view**      | Limit the list, treemap and sunburst to any search (`kind:video`, `size:>1GB`, …); folder sizes count only what matches.                                                                                                               |
+| **Storage by type**      | How much space videos, spreadsheets, archives… take, or every extension on its own, for the drive or the folder you're in.                                                                                                             |
+| **Cleanup suggestions**  | Build output, caches, old temp files and downloads you can usually delete, marked safe or check-first, ready to send to the cart.                                                                                                      |
+| **Cleanup cart**         | Collect files and folders from anywhere, review, then send them to the Recycle Bin (with undo) or delete permanently.                                                                                                                  |
+| **Duplicate finder**     | Finds identical files by content, not name.                                                                                                                                                                                            |
+| **Exports**              | A shareable HTML report, CSV or JSON for the current folder, the changes, or the duplicates.                                                                                                                                           |
+| **Explorer integration** | "Analyze with Bulk" on any folder or drive's right-click menu.                                                                                                                                                                         |
+| **Command line**         | `bulk .` opens a folder in the app; `bulk` on its own is an interactive finder; `bulk top`, `search`, `junk`, `changes`, `delete`… print tables or JSON for scripts and AI agents.                                                     |
+| **Scheduled snapshots**  | Optional daily or weekly snapshots in the background, even when Bulk is closed.                                                                                                                                                        |
 
 ---
 
@@ -63,22 +63,24 @@ drives (like Google Drive) are listed but only scanned when you ask.
 ### The window
 
 ```
-┌───────────────────────────── title bar: search, cart, theme ─────────────────────────────┐
-│ sidebar │  C: Local disk · 197 GB in 1.2M files · 37 GB free            Browse Changes │
-│         │                                         Duplicates Types  Export  Rescan ▾  │
-│  C: ◔   │ ┌──────────────── file list ───────────┐ ┌──────────── treemap / sunburst ────────┐ │
-│  D: ◑   │ │ Users                     84.0 GB    │ │                                        │ │
-│  G: ◕   │ │ Windows                   27.9 GB    │ │                                        │ │
-│         │ │ …                                    │ │                                        │ │
-│ ⚙       │ └──────────────────────────────────────┘ └────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│ Title bar: search · cleanup cart · theme                                              │
+├──────────┬────────────────────────────────────────────────────────────────────────────┤
+│ Sidebar  │ C: Local disk · 197 GB in 1.2M files · 37 GB free                          │
+│          │ Browse  Changes  Duplicates  Types                         Export  Rescan  │
+│ C:  84%  │ ┌─ File list ──────────────────┐ ┌─ Treemap / sunburst ──────────────────┐ │
+│ D:  52%  │ │ Users                84.0 GB │ │                                       │ │
+│ G:  71%  │ │ Windows              27.9 GB │ │                                       │ │
+│          │ │ ...                          │ │                                       │ │
+│ Settings │ └──────────────────────────────┘ └───────────────────────────────────────┘ │
+└──────────┴────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Sidebar**: one ring per drive showing how full it is. Collapse it with Ctrl+B; the
   collapsed rail still shows each drive, with details in a tooltip.
 - **Drive header**: size, file count and free space (amber below 10%, red below 5%).
   Normally that's all: drives are read fast and kept up to date live. It adds
-  *Fast mode off* when scans walk folders instead, and *Snapshot from …* when the
+  _Fast mode off_ when scans walk folders instead, and _Snapshot from …_ when the
   drive isn't being kept up to date, so what you see is the last scan.
 - **Tabs**: Browse, Changes, Duplicates and Types. The last three start out scoped to
   the folder you had open in Browse, and show its full path.
@@ -100,11 +102,11 @@ drives (like Google Drive) are listed but only scanned when you ask.
 
 When a drive is live, the charts and list show what's happened since the last scan:
 
-| Marker | Meaning |
-|---|---|
-| Green outline, "New" tag | Appeared since the last scan |
+| Marker                                   | Meaning                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------- |
+| Green outline, "New" tag                 | Appeared since the last scan                                          |
 | Grey, dashed, crossed out, "Deleted" tag | Deleted since the last scan; its size is already taken off the totals |
-| Faded with red stripes | In the cleanup cart (dashed red outline on the item you added) |
+| Faded with red stripes                   | In the cleanup cart (dashed red outline on the item you added)        |
 
 Rescanning a folder (or the drive) clears the markers. Files that appear and disappear
 again before a rescan, like temp files, just vanish instead of leaving grey ghosts.
@@ -124,28 +126,28 @@ With fast mode on, a whole-drive rescan of C: takes about 5 s. A huge folder (ov
 Type to search file and folder names. Every part of the query has to match, so filters
 combine freely: `kind:video size:>1GB -in:appdata sort:size`.
 
-| Write | Example | Finds |
-|---|---|---|
-| Words | `tax 2024` | Names containing every word |
-| Quotes | `"tax return"` | The phrase, spaces included |
-| Wildcards | `IMG_2024*.jpg`, `report_v?.docx` | Whole names: `*` is any text, `?` one character |
-| Path | `Downloads/invoice`, `projects/*.zip` | The name, inside those folders in that order (not necessarily directly) |
-| Drive path | `C:/Users/me/Downloads/report` | Same, but starting at the drive root |
-| `ext:` | `ext:mp4,mkv`, `ext:xls*`, `ext:none` | Extension; `none` is files without one |
-| `kind:` | `kind:video`, `kind:spreadsheet` | A group of extensions (see [Types](#types)); `type:video` works too |
-| `size:` | `size:>1GB`, `size:<10mb`, `size:100mb..2gb` | Size on disk, or a range |
-| `modified:` | `modified:2024`, `modified:>2024-06`, `modified:<30d` | A year/month/day, after or before one, or within / older than an age |
-| `older:` / `newer:` | `older:1y`, `newer:2w` | Modified more / less than `h`, `d`, `w`, `m`, `y` ago |
-| `before:` / `after:` | `before:2024-06` | Modified before / after a date |
-| `type:` | `type:dir`, `type:file` | Folders or files only |
-| `is:` | `is:empty`, `is:hidden`, `is:system`, `is:new` | Empty files and folders, attributes, or new since the last scan |
-| `files:` | `files:>1000` | Folders holding at least that many files |
-| `in:` | `in:downloads` | Inside a folder whose name contains this |
-| `under:` | `under:"C:\Users\me\Music"` | Inside exactly that folder |
-| `drive:` | `drive:c,d` | Only those drives |
-| `-` or `!` | `-ext:tmp`, `!in:node_modules` | Leave out anything matching |
-| `\|` or `OR` | `mp4\|mkv`, `ext:pdf\|docx`, `holiday OR vacation` | Either one |
-| `sort:` | `sort:size`, `small`, `name`, `newest`, `oldest`, `files` | Order of results (default: best name match, then size) |
+| Write                | Example                                                   | Finds                                                                   |
+| -------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Words                | `tax 2024`                                                | Names containing every word                                             |
+| Quotes               | `"tax return"`                                            | The phrase, spaces included                                             |
+| Wildcards            | `IMG_2024*.jpg`, `report_v?.docx`                         | Whole names: `*` is any text, `?` one character                         |
+| Path                 | `Downloads/invoice`, `projects/*.zip`                     | The name, inside those folders in that order (not necessarily directly) |
+| Drive path           | `C:/Users/me/Downloads/report`                            | Same, but starting at the drive root                                    |
+| `ext:`               | `ext:mp4,mkv`, `ext:xls*`, `ext:none`                     | Extension; `none` is files without one                                  |
+| `kind:`              | `kind:video`, `kind:spreadsheet`                          | A group of extensions (see [Types](#types)); `type:video` works too     |
+| `size:`              | `size:>1GB`, `size:<10mb`, `size:100mb..2gb`              | Size on disk, or a range                                                |
+| `modified:`          | `modified:2024`, `modified:>2024-06`, `modified:<30d`     | A year/month/day, after or before one, or within / older than an age    |
+| `older:` / `newer:`  | `older:1y`, `newer:2w`                                    | Modified more / less than `h`, `d`, `w`, `m`, `y` ago                   |
+| `before:` / `after:` | `before:2024-06`                                          | Modified before / after a date                                          |
+| `type:`              | `type:dir`, `type:file`                                   | Folders or files only                                                   |
+| `is:`                | `is:empty`, `is:hidden`, `is:system`, `is:new`            | Empty files and folders, attributes, or new since the last scan         |
+| `files:`             | `files:>1000`                                             | Folders holding at least that many files                                |
+| `in:`                | `in:downloads`                                            | Inside a folder whose name contains this                                |
+| `under:`             | `under:"C:\Users\me\Music"`                               | Inside exactly that folder                                              |
+| `drive:`             | `drive:c,d`                                               | Only those drives                                                       |
+| `-` or `!`           | `-ext:tmp`, `!in:node_modules`                            | Leave out anything matching                                             |
+| `\|` or `OR`         | `mp4\|mkv`, `ext:pdf\|docx`, `holiday OR vacation`        | Either one                                                              |
+| `sort:`              | `sort:size`, `small`, `name`, `newest`, `oldest`, `files` | Order of results (default: best name match, then size)                  |
 
 The row under the search box picks where to look: all drives, the current drive, or
 the folder open in the chart. The **?** button lists the syntax; click an example to
@@ -156,22 +158,22 @@ Results can be selected:
 - Click a checkbox (or Ctrl+click a row), or press Tab to tick the highlighted one.
 - Shift+click selects everything between the last one you ticked and this one;
   Shift+↑/↓ grows the selection from the keyboard.
-- The checkbox above the results selects everything shown, then offers *Select all N*
+- The checkbox above the results selects everything shown, then offers _Select all N_
   for every match (up to 10,000).
 
 Right-click a result for the same menu as in the list (add to cart, open, show in
 chart, show in Explorer, delete, copy path), plus select, add the selection to the
 cart, and filter Browse. Their shortcuts work in the palette too:
 
-| Keys | Action |
-|---|---|
-| Enter | Show the result in the list and chart |
-| Shift+Enter / Ctrl+E | Show in Explorer |
-| Ctrl+Enter | Add the selection (or the highlighted result) to the cart |
-| Delete | Same, or take the highlighted result back out (when the cursor is at the end of the search text) |
-| Shift+Delete | Delete the highlighted result (with confirmation) |
-| Ctrl+C | Copy the path(s), unless text is selected in the search box |
-| Alt+Enter | Filter Browse to these results |
+| Keys                 | Action                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| Enter                | Show the result in the list and chart                                                            |
+| Shift+Enter / Ctrl+E | Show in Explorer                                                                                 |
+| Ctrl+Enter           | Add the selection (or the highlighted result) to the cart                                        |
+| Delete               | Same, or take the highlighted result back out (when the cursor is at the end of the search text) |
+| Shift+Delete         | Delete the highlighted result (with confirmation)                                                |
+| Ctrl+C               | Copy the path(s), unless text is selected in the search box                                      |
+| Alt+Enter            | Filter Browse to these results                                                                   |
 
 The palette also runs commands (rescan, switch views, theme, settings…).
 
@@ -182,7 +184,7 @@ search query there and press Enter: the list, treemap and sunburst then show onl
 what matches, and every folder's size counts only its matching files. The bar shows
 how many files match and how much space they take. Esc or ✕ clears it.
 
-A filter can also come from elsewhere: *Filter Browse* in the search palette (Alt+Enter)
+A filter can also come from elsewhere: _Filter Browse_ in the search palette (Alt+Enter)
 uses the current search, and clicking a row in Types filters to that type or extension.
 The filter stays while files change and across rescans. The bar also shows on the
 Changes and Duplicates tabs, so you can set or change it there:
@@ -196,24 +198,24 @@ Changes and Duplicates tabs, so you can set or change it there:
 The Types tab adds up the files in the drive, or in the folder open in Browse, by kind
 or by extension:
 
-| Kind | Extensions (examples) |
-|---|---|
-| Videos | mp4, mkv, avi, mov, webm, … |
-| Images | jpg, png, heic, webp, raw camera files, … |
-| Audio | mp3, flac, wav, m4a, … |
-| Documents | pdf, docx, txt, md, epub, … |
-| Spreadsheets | xlsx, xls, csv, tsv, ods, … |
-| Presentations | pptx, ppt, key, odp, … |
-| Archives | zip, rar, 7z, tar, gz, … |
-| Programs | exe, dll, msi, appx, jar, … |
-| System files | sys, drv, mui, cat, efi, … |
-| Code | js, ts, py, rs, json, html, … |
-| Disk images | iso, vhdx, vmdk, wim, … |
-| Databases | db, sqlite, mdf, accdb, … |
-| Design & 3D | psd, ai, fig, blend, stl, … |
-| Fonts, Email, Logs & temp | ttf, otf · pst, eml · log, tmp, dmp, … |
+| Kind                      | Extensions (examples)                     |
+| ------------------------- | ----------------------------------------- |
+| Videos                    | mp4, mkv, avi, mov, webm, …               |
+| Images                    | jpg, png, heic, webp, raw camera files, … |
+| Audio                     | mp3, flac, wav, m4a, …                    |
+| Documents                 | pdf, docx, txt, md, epub, …               |
+| Spreadsheets              | xlsx, xls, csv, tsv, ods, …               |
+| Presentations             | pptx, ppt, key, odp, …                    |
+| Archives                  | zip, rar, 7z, tar, gz, …                  |
+| Programs                  | exe, dll, msi, appx, jar, …               |
+| System files              | sys, drv, mui, cat, efi, …                |
+| Code                      | js, ts, py, rs, json, html, …             |
+| Disk images               | iso, vhdx, vmdk, wim, …                   |
+| Databases                 | db, sqlite, mdf, accdb, …                 |
+| Design & 3D               | psd, ai, fig, blend, stl, …               |
+| Fonts, Email, Logs & temp | ttf, otf · pst, eml · log, tmp, dmp, …    |
 
-Anything else is *Other*, and files without an extension have their own row. The bar
+Anything else is _Other_, and files without an extension have their own row. The bar
 at the top shows the split at a glance. Click a row to filter Browse to those files, so
 the list and charts show where they are; the search button on the row lists them in
 the palette instead, biggest first, ready to select and add to the cart.
@@ -221,10 +223,10 @@ the palette instead, biggest first, ready to select and add to the cart.
 ### Cleaning up
 
 - **Cleanup cart**: Delete adds the selection (Delete again takes it out). Review the
-  cart from the title bar, then *Move to Recycle Bin* (undoable from the toast) or
-  *Delete permanently* (asks you to confirm first).
-- **Delete straight away**: Shift+Del, or right-click → *Delete…*, opens a dialog with
-  *Move to Recycle Bin* as the main button and *Delete permanently* beside it.
+  cart from the title bar, then _Move to Recycle Bin_ (undoable from the toast) or
+  _Delete permanently_ (asks you to confirm first).
+- **Delete straight away**: Shift+Del, or right-click → _Delete…_, opens a dialog with
+  _Move to Recycle Bin_ as the main button and _Delete permanently_ beside it.
 
 Either way, deleted items stay greyed out until the next rescan.
 
@@ -241,20 +243,20 @@ hibernation files, which have a button or a note instead of checkboxes). Folders
 belong to installed programs (Program Files, AppData, tools' dot-folders like
 `~\.vscode`) are left out of the build-output rules.
 
-- Tick items, or a whole kind, and *Add to cart*; *Add all safe to cart* takes
+- Tick items, or a whole kind, and _Add to cart_; _Add all safe to cart_ takes
   everything marked safe. Nothing is deleted from the tab itself: it all goes through
   the cart's review and Recycle Bin.
 - Click a path to show it in Browse; hover for Explorer.
-- The eye button hides one item or a whole kind for good; *N hidden* brings them
+- The eye button hides one item or a whole kind for good; _N hidden_ brings them
   back. `bulk junk` hides the same ones.
-- The drive header shows *N GB to clean up* when there's at least 100 MB marked safe;
+- The drive header shows _N GB to clean up_ when there's at least 100 MB marked safe;
   clicking it opens the tab.
 
 ### What changed
 
 Pick an earlier snapshot to compare against. The list shows what grew or shrank,
 biggest first; expand folders to drill down. New and deleted items are tagged. It's
-scoped to the folder you had open in Browse; *Show whole drive* widens it.
+scoped to the folder you had open in Browse; _Show whole drive_ widens it.
 
 A dated snapshot is saved after each full scan and, if you turn it on, on a daily or
 weekly schedule. Settings → Keep sets how many dated snapshots each drive
@@ -263,21 +265,21 @@ keeps (default 7).
 ### Duplicates
 
 Finds files with identical content. Options: minimum size (1 / 10 / 100 MB), only the
-open folder (on by default when you came from one), and *Skip Windows and program
-folders*, which skips folders named `Windows`, `Program Files`, `Program Files (x86)`,
+open folder (on by default when you came from one), and _Skip Windows and program
+folders_, which skips folders named `Windows`, `Program Files`, `Program Files (x86)`,
 `ProgramData`, `$Recycle.Bin`, `System Volume Information`, `$Windows.~BT`,
-`$Windows.~WS` and `Recovery`. Pick copies by hand or with *Select all but the
-newest/oldest*, then add them to the cleanup cart. Results stay while you switch tabs.
+`$Windows.~WS` and `Recovery`. Pick copies by hand or with _Select all but the
+newest/oldest_, then add them to the cleanup cart. Results stay while you switch tabs.
 
 ### Export
 
 The Export button exports whatever tab you're on:
 
-| Tab | HTML | CSV | JSON |
-|---|---|---|---|
-| Browse | Report with treemap, file types, largest folders and files | Every file and folder | Folder tree |
-| Changes | Totals and the biggest changes | Every change | Every change |
-| Duplicates | Every duplicate set | Every duplicate file | Every set |
+| Tab        | HTML                                                       | CSV                   | JSON         |
+| ---------- | ---------------------------------------------------------- | --------------------- | ------------ |
+| Browse     | Report with treemap, file types, largest folders and files | Every file and folder | Folder tree  |
+| Changes    | Totals and the biggest changes                             | Every change          | Every change |
+| Duplicates | Every duplicate set                                        | Every duplicate file  | Every set    |
 
 It's disabled when there's nothing to export (no changes, or duplicates not searched
 yet). HTML reports are single files you can send to anyone; they use the Geist font
@@ -285,53 +287,53 @@ from Google Fonts and fall back to the system font offline.
 
 ### Keyboard shortcuts
 
-| Keys | Action |
-|---|---|
-| Ctrl+K / Ctrl+F | Search and commands |
-| Ctrl+Shift+F | Filter the list and chart |
-| Ctrl+R / F5 | Rescan open folder |
-| Ctrl+Shift+R | Rescan whole drive |
-| Ctrl+B | Collapse / expand sidebar |
-| Ctrl+1 / Ctrl+2 | Treemap / sunburst |
-| Ctrl+E | Show selection in Explorer |
-| Ctrl+C | Copy path of selection |
-| Delete | Add to / remove from cleanup cart |
-| Shift+Delete | Delete (with confirmation) |
-| Esc | Clear selection, close dialogs |
-| ↑ ↓ ← → Home End | Move around the list |
-| Enter | Show folder in the chart |
-| Shift+Enter | Show in Explorer |
-| Backspace | Zoom out |
-| ? | All shortcuts |
+| Keys             | Action                            |
+| ---------------- | --------------------------------- |
+| Ctrl+K / Ctrl+F  | Search and commands               |
+| Ctrl+Shift+F     | Filter the list and chart         |
+| Ctrl+R / F5      | Rescan open folder                |
+| Ctrl+Shift+R     | Rescan whole drive                |
+| Ctrl+B           | Collapse / expand sidebar         |
+| Ctrl+1 / Ctrl+2  | Treemap / sunburst                |
+| Ctrl+E           | Show selection in Explorer        |
+| Ctrl+C           | Copy path of selection            |
+| Delete           | Add to / remove from cleanup cart |
+| Shift+Delete     | Delete (with confirmation)        |
+| Esc              | Clear selection, close dialogs    |
+| ↑ ↓ ← → Home End | Move around the list              |
+| Enter            | Show folder in the chart          |
+| Shift+Enter      | Show in Explorer                  |
+| Backspace        | Zoom out                          |
+| ?                | All shortcuts                     |
 
 ### Settings
 
-| Setting | Default | |
-|---|---|---|
-| Theme | System | System, dark or light |
-| Colours | Bulk | A colour template (see below) |
-| Layout | Side by side | Chart beside or below the list |
-| Fast mode | On | Use the helper. Off = walk folders, no live updates; the helper stays set up so turning it back on needs no prompt |
-| Automatic snapshots | Off | Background snapshots via a scheduled task, which only exists while this is on |
-| How often | Daily | Daily or weekly |
-| Keep | 7 | Dated snapshots per drive |
-| "Analyze with Bulk" in Explorer | On | Right-click entry for folders and drives |
+| Setting                         | Default      |                                                                                                                    |
+| ------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Theme                           | System       | System, dark or light                                                                                              |
+| Colours                         | Bulk         | A colour template (see below)                                                                                      |
+| Layout                          | Side by side | Chart beside or below the list                                                                                     |
+| Fast mode                       | On           | Use the helper. Off = walk folders, no live updates; the helper stays set up so turning it back on needs no prompt |
+| Automatic snapshots             | Off          | Background snapshots via a scheduled task, which only exists while this is on                                      |
+| How often                       | Daily        | Daily or weekly                                                                                                    |
+| Keep                            | 7            | Dated snapshots per drive                                                                                          |
+| "Analyze with Bulk" in Explorer | On           | Right-click entry for folders and drives                                                                           |
 
 ### Colour templates
 
 Settings → Colours lists every template in `%LOCALAPPDATA%\Bulk\templates` (the
-*Open folder* button opens it). Bulk ships five:
+_Open folder_ button opens it). Bulk ships five:
 
-| Template | Look |
-|---|---|
-| Bulk | The original: soft violet on deep grey |
-| Fern | Fresh green on dark moss |
-| Tide | Clear ocean blue on midnight navy |
-| Ember | Warm amber on charcoal |
-| Graphite | Neutral greys with a white accent |
+| Template | Look                                   |
+| -------- | -------------------------------------- |
+| Bulk     | The original: soft violet on deep grey |
+| Fern     | Fresh green on dark moss               |
+| Tide     | Clear ocean blue on midnight navy      |
+| Ember    | Warm amber on charcoal                 |
+| Graphite | Neutral greys with a white accent      |
 
 To make your own, copy one of the files, rename it, edit the colours, and press
-*Reload* in Settings. Each template has a dark and a light half:
+_Reload_ in Settings. Each template has a dark and a light half:
 
 ```json
 {
@@ -349,21 +351,22 @@ To make your own, copy one of the files, rename it, edit the colours, and press
 - **ui**: every colour in the app, each role on its own, so a red or yellow theme
   never gets mixed up with warnings:
 
-  | Group | Keys |
-  |---|---|
-  | Window and text | `app-bg`, `app-tint`, `sidebar-tint`, `panel`, `panel-2`, `popover`, `hover`, `line`, `line-strong`, `fg`, `fg-muted`, `fg-subtle`, `shadow`, `backdrop` |
-  | Accent and controls | `accent`, `accent-fg`, `accent-soft`, `switch-off`, `switch-knob`, `bar-end` |
-  | Messages | `danger`, `danger-fg`, `ok`, `warn` |
-  | Drive usage | `usage`, `usage-low` (under 10% free), `usage-full` (under 5% free) |
-  | Status | `stale` (*Snapshot from …*), `live` |
-  | Markers | `added`, `removed` (live new/deleted), `cart` |
-  | Changes tab | `grew`, `shrank` |
-  | Charts | `chart-folder`, `chart-hatch`, `chart-hover`, `chart-hover-line`, `chart-select`, `chart-label` (or `auto`), `chart-label-folder` |
-  | Title bar | `close-hover`, `close-fg`, `logo-1` (the logo's lifted tile) |
+  | Group               | Keys                                                                                                                                                     |
+  | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Window and text     | `app-bg`, `app-tint`, `sidebar-tint`, `panel`, `panel-2`, `popover`, `hover`, `line`, `line-strong`, `fg`, `fg-muted`, `fg-subtle`, `shadow`, `backdrop` |
+  | Accent and controls | `accent`, `accent-fg`, `accent-soft`, `switch-off`, `switch-knob`, `bar-end`                                                                             |
+  | Messages            | `danger`, `danger-fg`, `ok`, `warn`                                                                                                                      |
+  | Drive usage         | `usage`, `usage-low` (under 10% free), `usage-full` (under 5% free)                                                                                      |
+  | Status              | `stale` (_Snapshot from …_), `live`                                                                                                                      |
+  | Markers             | `added`, `removed` (live new/deleted), `cart`                                                                                                            |
+  | Changes tab         | `grew`, `shrank`                                                                                                                                         |
+  | Charts              | `chart-folder`, `chart-hatch`, `chart-hover`, `chart-hover-line`, `chart-select`, `chart-label` (or `auto`), `chart-label-folder`                        |
+  | Title bar           | `close-hover`, `close-fg`, `logo-1` (the logo's lifted tile)                                                                                             |
 
   Values can point at other colours: the default sets `usage-full` to
   `var(--danger)`, so it follows whatever a template uses for danger unless the
   template sets `usage-full` itself.
+
 - **files**: file-type colours in the treemap, sunburst and Types tab (`folder`,
   `video`, `image`, `document`, `spreadsheet`, `code`, …).
 - **branches**: the sunburst's colour for each top-level folder.
@@ -419,7 +422,7 @@ anything wasn't deleted.
 - moves things to the Recycle Bin; `--permanently-delete` skips the bin and can't be
   undone;
 - refuses whole drives, Windows, Program Files, ProgramData, user and profile
-  folders (Desktop, Documents, Downloads, AppData…, though what's *in* them is fine),
+  folders (Desktop, Documents, Downloads, AppData…, though what's _in_ them is fine),
   files marked as system files, and Bulk's own files. If anything is refused,
   nothing is deleted;
 - stops above 50 GB in one go unless `--max` says otherwise;
@@ -451,21 +454,21 @@ size, a bar in the file type's colour from your colour template, and the date; t
 panel on the right shows details, the biggest things inside a folder and what types
 fill it.
 
-| Keys | Action |
-|---|---|
-| Type | Search |
-| → / ← | Into a folder / up a level (at the end / start of the search) |
-| Tab, Shift+Tab | Pick or unpick, and move |
-| Ctrl+A | Pick everything listed |
-| Enter | Print the picked paths (or the highlighted one) and quit |
-| Ctrl+O / Ctrl+E / Ctrl+B | Open / show in Explorer / show in the Bulk app |
-| Alt+C | Copy the paths |
-| Ctrl+D | Move to the Recycle Bin, after a confirmation |
-| Ctrl+R | Search this folder, the whole drive, or every drive |
-| Ctrl+S | Sort by best match, size, newest or name |
-| Ctrl+P / Ctrl+N | Earlier / later searches |
-| Esc | Clear the search, or quit |
-| F1 | All the keys |
+| Keys                     | Action                                                        |
+| ------------------------ | ------------------------------------------------------------- |
+| Type                     | Search                                                        |
+| → / ←                    | Into a folder / up a level (at the end / start of the search) |
+| Tab, Shift+Tab           | Pick or unpick, and move                                      |
+| Ctrl+A                   | Pick everything listed                                        |
+| Enter                    | Print the picked paths (or the highlighted one) and quit      |
+| Ctrl+O / Ctrl+E / Ctrl+B | Open / show in Explorer / show in the Bulk app                |
+| Alt+C                    | Copy the paths                                                |
+| Ctrl+D                   | Move to the Recycle Bin, after a confirmation                 |
+| Ctrl+R                   | Search this folder, the whole drive, or every drive           |
+| Ctrl+S                   | Sort by best match, size, newest or name                      |
+| Ctrl+P / Ctrl+N          | Earlier / later searches                                      |
+| Esc                      | Clear the search, or quit                                     |
+| F1                       | All the keys                                                  |
 
 Enter prints to stdout while the finder draws on the terminal, so it works in
 pipelines like fzf: `code (bulk find ext:log)` in PowerShell. `--print0` separates
@@ -587,7 +590,7 @@ sequenceDiagram
     end
 ```
 
-The journal says *which* files changed. The helper then reads each one's current MFT
+The journal says _which_ files changed. The helper then reads each one's current MFT
 record, so the app gets the new name, parent, size and attributes, and applies them
 to the tree by file id. If the journal can't cover the gap (it's been too long, or it
 was reset), the drive is rescanned instead.
@@ -605,7 +608,7 @@ stateDiagram-v2
     Gone --> Normal: restored from Recycle Bin
 ```
 
-*Gone* items keep their place (greyed out) but are no longer counted in any total, and
+_Gone_ items keep their place (greyed out) but are no longer counted in any total, and
 search, duplicates, exports and snapshots skip them. A move into `$Recycle.Bin` counts
 as a deletion where the file used to be.
 
@@ -616,7 +619,7 @@ as a deletion where the file used to be.
 - `current.bulk`: the latest state, used for instant reopen. Saved after scans and when
   Bulk closes.
 - `history\<unix time>.bulk`: dated snapshots for the Changes tab, pruned to the
-  *Keep* setting.
+  _Keep_ setting.
 
 The format is a small header and JSON metadata (drive, time, scan method, totals,
 journal position), then the tree as a compact binary layout compressed with zstd. C:
@@ -843,14 +846,14 @@ The installer:
 
 ## Troubleshooting
 
-| Problem | What to do |
-|---|---|
-| Scans are slow and protected folders are missing | Fast mode is off or wasn't allowed. Settings → Fast mode, or the sidebar's *Allow*. |
-| "Fast mode needs permission" after updating | The helper task points at an older copy; *Allow* re-registers it. |
-| A drive shows *Snapshot from …* | It was scanned with the folder walk (no journal position). Rescan the whole drive with fast mode on. |
+| Problem                                               | What to do                                                                                                                                            |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scans are slow and protected folders are missing      | Fast mode is off or wasn't allowed. Settings → Fast mode, or the sidebar's _Allow_.                                                                   |
+| "Fast mode needs permission" after updating           | The helper task points at an older copy; _Allow_ re-registers it.                                                                                     |
+| A drive shows _Snapshot from …_                       | It was scanned with the folder walk (no journal position). Rescan the whole drive with fast mode on.                                                  |
 | Changes tab says a snapshot came from a standard scan | That snapshot was a folder walk, which can't see protected folders, so some differences are just what it couldn't see. Pick one taken with fast mode. |
-| Lots of grey "Deleted" items | They're cleared by rescanning the folder (Ctrl+R). |
-| Snapshot folder looks empty in Explorer | You're running a dev build from inside a packaged app; use Settings → Open folder. |
+| Lots of grey "Deleted" items                          | They're cleared by rescanning the folder (Ctrl+R).                                                                                                    |
+| Snapshot folder looks empty in Explorer               | You're running a dev build from inside a packaged app; use Settings → Open folder.                                                                    |
 
 ---
 

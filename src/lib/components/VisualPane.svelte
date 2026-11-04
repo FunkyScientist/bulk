@@ -103,15 +103,15 @@
         </div>
       </div>
     {:else}
-    {#key app.visual}
-      <div class="h-full" in:fly={{ y: 6, duration: 240, easing: cubicOut }}>
-        {#if app.visual === 'treemap'}
-          <Treemap bind:this={view} {letter} />
-        {:else}
-          <Sunburst bind:this={view} {letter} />
-        {/if}
-      </div>
-    {/key}
+      {#key app.visual}
+        <div class="h-full" in:fly={{ y: 6, duration: 240, easing: cubicOut }}>
+          {#if app.visual === 'treemap'}
+            <Treemap bind:this={view} {letter} />
+          {:else}
+            <Sunburst bind:this={view} {letter} />
+          {/if}
+        </div>
+      {/key}
     {/if}
   </div>
 </div>

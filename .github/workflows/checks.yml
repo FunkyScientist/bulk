@@ -1,0 +1,46 @@
+# Runs the tests and checks on every push and pull request.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        run: pnpm exec prettier --check .
+
+      - name: Svelte and TypeScript
+        run: pnpm check
+
+      # The app crate embeds the built UI, so it has to exist before clippy runs.
+      - name: Build UI
+        run: pnpm build
+
+      - name: Tests
+        run: cargo test -p bulk-core -p bulk-cli
+
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings

@@ -126,7 +126,8 @@
         focus === null
           ? 'bg-panel text-fg shadow-sm'
           : 'text-fg-subtle hover:text-fg-muted'}"
-        onclick={() => (inFolder = false)}><HardDrive class="size-3.5" /> Whole {letter}: drive</button
+        onclick={() => (inFolder = false)}
+        ><HardDrive class="size-3.5" /> Whole {letter}: drive</button
       >
       <button
         class="flex min-w-0 items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors disabled:opacity-40 {inFolder &&
@@ -166,7 +167,9 @@
       </div>
     </div>
 
-    <div class="grid shrink-0 grid-cols-[1fr_90px_90px_160px] gap-3 px-4 py-1.5 text-[11px] text-fg-subtle">
+    <div
+      class="grid shrink-0 grid-cols-[1fr_90px_90px_160px] gap-3 px-4 py-1.5 text-[11px] text-fg-subtle"
+    >
       <span>{mode === 'kind' ? 'Type' : 'Extension'}</span>
       <span class="text-right">Files</span>
       <span class="text-right">On disk</span>
@@ -199,8 +202,9 @@
               {/if}
             </span>
             <span class="go ml-auto flex shrink-0 items-center gap-0.5">
-              <span class="grid size-6 place-items-center text-fg-subtle" title="Show only these in Browse"
-                ><Funnel class="size-3.5" /></span
+              <span
+                class="grid size-6 place-items-center text-fg-subtle"
+                title="Show only these in Browse"><Funnel class="size-3.5" /></span
               >
               <button
                 class="grid size-6 place-items-center rounded-md text-fg-subtle hover:bg-panel-2 hover:text-fg"

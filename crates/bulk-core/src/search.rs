@@ -74,6 +74,9 @@ enum Cond {
     Never,
 }
 
+// A query has only a few patterns, so the size doesn't matter, and keeping the
+// `Finder` inline saves a pointer hop on every name it's matched against.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 enum Pat {
     /// Anywhere in the text.

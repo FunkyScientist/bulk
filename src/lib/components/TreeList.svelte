@@ -419,11 +419,7 @@
     transform: rotate(90deg);
   }
   .bar {
-    background: linear-gradient(
-      90deg,
-      var(--accent),
-      var(--bar-end)
-    );
+    background: linear-gradient(90deg, var(--accent), var(--bar-end));
     transition: width 400ms var(--ease-out-soft);
   }
   .skeleton {

@@ -182,7 +182,9 @@
   });
   const scopes = $derived([
     { k: 'all' as const, label: 'All drives', icon: Globe },
-    ...(app.current ? [{ k: 'drive' as const, label: `${app.current}: drive`, icon: HardDrive }] : []),
+    ...(app.current
+      ? [{ k: 'drive' as const, label: `${app.current}: drive`, icon: HardDrive }]
+      : []),
     ...(folder !== null && folderName
       ? [{ k: 'folder' as const, label: folderName, icon: FolderOpen }]
       : []),
@@ -285,7 +287,8 @@
 
   function hitMenu(e: MouseEvent, h: SearchHit) {
     e.preventDefault();
-    if (!picked[key(h)] && !pickedAll) active = items.findIndex((x) => x.kind === 'hit' && x.hit === h);
+    if (!picked[key(h)] && !pickedAll)
+      active = items.findIndex((x) => x.kind === 'hit' && x.hit === h);
     const n = pickedCount;
     void nodeMenu(
       e,
@@ -569,9 +572,7 @@
           aria-label="Select all"
           onclick={toggleAll}
         >
-          {#if allPicked}<Check class="size-3" />{:else if pickedCount}<Minus
-              class="size-3"
-            />{/if}
+          {#if allPicked}<Check class="size-3" />{:else if pickedCount}<Minus class="size-3" />{/if}
         </button>
         {#if pickedCount}
           <span class="tabular text-fg">
@@ -590,9 +591,8 @@
           >
         {:else}
           <span class="text-fg-subtle"
-            >Select {stats && stats.total > hits.length
-              ? `all ${count(stats.total)}`
-              : 'all'} · <kbd class="kbd">Tab</kbd> picks one, Shift+click a range</span
+            >Select {stats && stats.total > hits.length ? `all ${count(stats.total)}` : 'all'} ·
+            <kbd class="kbd">Tab</kbd> picks one, Shift+click a range</span
           >
         {/if}
         <button
@@ -623,65 +623,64 @@
         </div>
       </div>
     {:else}
-
-    <div class="relative min-h-0 flex-1 overflow-y-auto p-1.5" bind:this={list}>
-      {#if items.length}
-        <div
-          class="highlight absolute inset-x-1.5 rounded-lg"
-          style="height: {ROW}px; transform: translateY({active * ROW}px)"
-        ></div>
-      {:else if text.trim().length >= 2 && stats}
-        <div class="p-6 text-center text-fg-muted">Nothing matches “{text.trim()}”.</div>
-      {/if}
-      {#each items as item, i (item.kind === 'hit' ? `h${item.hit.letter}${item.hit.id}` : `a${item.label}`)}
-        <button
-          class="relative flex w-full items-center gap-3 rounded-lg px-3 text-left"
-          style="height: {ROW}px"
-          onpointermove={() => (active = i)}
-          onclick={(e) => {
-            if (item.kind === 'hit' && (e.shiftKey || e.ctrlKey)) toggle(item.hit, e.shiftKey);
-            else run(item);
-          }}
-          oncontextmenu={(e) => {
-            if (item.kind === 'hit') hitMenu(e, item.hit);
-          }}
-        >
-          {#if item.kind === 'action'}
-            <item.icon class="size-4 shrink-0 text-fg-muted" />
-            <span class="flex-1 truncate">{item.label}</span>
-            {#if item.hint}<kbd class="kbd">{item.hint}</kbd>{/if}
-          {:else}
-            {@const h = item.hit}
-            {@const on = !!pickedAll || !!picked[key(h)]}
-            <span
-              class="check {on ? 'on' : ''}"
-              role="checkbox"
-              tabindex="-1"
-              aria-checked={on}
-              aria-label="Select {h.name}"
-              onclick={(e) => {
-                e.stopPropagation();
-                toggle(h, e.shiftKey);
-              }}
-              onkeydown={() => {}}
-            >
-              {#if on}<Check class="size-3" />{/if}
-            </span>
-            <span class="shrink-0 {h.dir ? 'text-accent' : 'text-fg-subtle'}">
-              {#if h.dir}<Folder class="size-4" />{:else}<File class="size-4" />{/if}
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate">{h.name}</span>
-              <span class="block truncate text-[11px] text-fg-subtle">{h.path}</span>
-            </span>
-            <span class="tabular shrink-0 text-right text-[12px]">
-              <span class="block">{bytes(h.alloc)}</span>
-              <span class="block text-[10.5px] text-fg-subtle">{ago(h.mtime)}</span>
-            </span>
-          {/if}
-        </button>
-      {/each}
-    </div>
+      <div class="relative min-h-0 flex-1 overflow-y-auto p-1.5" bind:this={list}>
+        {#if items.length}
+          <div
+            class="highlight absolute inset-x-1.5 rounded-lg"
+            style="height: {ROW}px; transform: translateY({active * ROW}px)"
+          ></div>
+        {:else if text.trim().length >= 2 && stats}
+          <div class="p-6 text-center text-fg-muted">Nothing matches “{text.trim()}”.</div>
+        {/if}
+        {#each items as item, i (item.kind === 'hit' ? `h${item.hit.letter}${item.hit.id}` : `a${item.label}`)}
+          <button
+            class="relative flex w-full items-center gap-3 rounded-lg px-3 text-left"
+            style="height: {ROW}px"
+            onpointermove={() => (active = i)}
+            onclick={(e) => {
+              if (item.kind === 'hit' && (e.shiftKey || e.ctrlKey)) toggle(item.hit, e.shiftKey);
+              else run(item);
+            }}
+            oncontextmenu={(e) => {
+              if (item.kind === 'hit') hitMenu(e, item.hit);
+            }}
+          >
+            {#if item.kind === 'action'}
+              <item.icon class="size-4 shrink-0 text-fg-muted" />
+              <span class="flex-1 truncate">{item.label}</span>
+              {#if item.hint}<kbd class="kbd">{item.hint}</kbd>{/if}
+            {:else}
+              {@const h = item.hit}
+              {@const on = !!pickedAll || !!picked[key(h)]}
+              <span
+                class="check {on ? 'on' : ''}"
+                role="checkbox"
+                tabindex="-1"
+                aria-checked={on}
+                aria-label="Select {h.name}"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  toggle(h, e.shiftKey);
+                }}
+                onkeydown={() => {}}
+              >
+                {#if on}<Check class="size-3" />{/if}
+              </span>
+              <span class="shrink-0 {h.dir ? 'text-accent' : 'text-fg-subtle'}">
+                {#if h.dir}<Folder class="size-4" />{:else}<File class="size-4" />{/if}
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate">{h.name}</span>
+                <span class="block truncate text-[11px] text-fg-subtle">{h.path}</span>
+              </span>
+              <span class="tabular shrink-0 text-right text-[12px]">
+                <span class="block">{bytes(h.alloc)}</span>
+                <span class="block text-[10.5px] text-fg-subtle">{ago(h.mtime)}</span>
+              </span>
+            {/if}
+          </button>
+        {/each}
+      </div>
     {/if}
 
     <div class="flex items-center gap-3 border-t border-line px-4 py-2 text-[11px] text-fg-subtle">
